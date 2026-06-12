@@ -261,7 +261,7 @@
     m.innerHTML =
       '<div class="gd-back"></div>' +
       '<div class="gd-dlg">' +
-        '<div class="gd-h"><span>☁️ Google Drive — ซิงค์ข้อมูล</span><button class="gd-x" title="ปิด">✕</button></div>' +
+        '<div class="gd-h"><span>☁️ Google Drive — ซิงค์ข้อมูล <small style="opacity:.7;font-size:11px;font-weight:600">v2 · โฟลเดอร์</small></span><button class="gd-x" title="ปิด">✕</button></div>' +
         '<div class="gd-bd">' +
           '<div class="gd-stat" id="gdStat"></div>' +
           '<div class="gd-row"><span class="gd-lab">บัญชี/สถานะ</span><b id="gdConn">ยังไม่ได้เชื่อม</b></div>' +
