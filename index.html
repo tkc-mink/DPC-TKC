@@ -26,6 +26,7 @@
           <button class="btn" id="btnVersions" title="เปิดไฟล์/เวอร์ชันที่บันทึกไว้ · โหลดต้นฉบับ"><span class="ic">🕓</span><span class="tx">เปิดไฟล์เก่า…</span></button>
           <button class="btn" id="btnBackup" title="ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมดลงเครื่อง (.json) — เก็บไว้กันข้อมูลหาย / ย้ายเครื่อง"><span class="ic">💾</span><span class="tx">สำรองลงเครื่อง…</span></button>
           <button class="btn" id="btnRestore" title="กู้คืนข้อมูลจากไฟล์สำรอง (.json) — แทนที่ข้อมูลปัจจุบัน"><span class="ic">♻️</span><span class="tx">กู้คืนจากไฟล์…</span></button>
+          <button class="btn" id="btnGDrive" title="ซิงค์ข้อมูลขึ้น Google Drive — เก็บบนคลาวด์ เปิดได้ทุกเครื่อง"><span class="ic">☁️</span><span class="tx">Google Drive…</span></button>
           <input type="file" id="restoreFile" accept=".json,application/json" style="display:none;" />
         </div>
       </div>
@@ -480,6 +481,7 @@
 <script src="app-xls2/chatbot2.js"></script>
 <script src="app-xls2/api-bridge.js"></script>
 <script src="app-xls2/img-layer.js"></script>
+<script src="app-xls2/gdrive-sync.js"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -1158,6 +1160,7 @@
     if (typeof toast === 'function') toast('💾 ดาวน์โหลดไฟล์สำรองแล้ว (' + nSheets + ' หมวด)');
   };
   $('btnRestore').onclick = function () { $('restoreFile').value = ''; $('restoreFile').click(); };
+  $('btnGDrive').onclick = function () { if (window.GDrive) GDrive.openPanel(); };
   $('restoreFile').onchange = function (e) {
     var f = e.target.files && e.target.files[0]; if (!f) return;
     var rd = new FileReader();
@@ -1848,13 +1851,13 @@
     }
     loadLayout();
     // ปุ่มไฟล์ (บันทึก/บันทึกเป็น/เปิดเก่า) ต้องอยู่รวมในเมนูเดียวเสมอ — กันโดนลากแยกออก
-    ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore'].forEach(function (id) {
+    ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore', 'btnGDrive'].forEach(function (id) {
       var b = document.getElementById(id);
       if (b) { if (!b.closest('#filePop')) document.getElementById('filePop').appendChild(b); b.draggable = false; }
     });
     try {
       var L = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (L && L.length) { var L2 = L.filter(function (r) { return ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore'].indexOf(r.id) < 0; }); if (L2.length !== L.length) localStorage.setItem(KEY, JSON.stringify(L2)); }
+      if (L && L.length) { var L2 = L.filter(function (r) { return ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore', 'btnGDrive'].indexOf(r.id) < 0; }); if (L2.length !== L.length) localStorage.setItem(KEY, JSON.stringify(L2)); }
     } catch (e) {}
   })();
 
