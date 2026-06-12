@@ -1897,5 +1897,13 @@
   window.addEventListener('beforeunload', function (e) { if (SG.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 })();
 </script>
+<script>
+/* Service Worker — โหลดไฟล์ล่าสุดอัตโนมัติ (ไม่ต้องกด Ctrl+Shift+R) + เปิดออฟไลน์ได้ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  });
+}
+</script>
 </body>
 </html>
