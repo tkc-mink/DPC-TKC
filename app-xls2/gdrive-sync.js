@@ -10,8 +10,9 @@
   var DEFAULT_CLIENT_ID = '1024761428527-sqtun1ggudnqjgia937c1era5u5sacme.apps.googleusercontent.com';
   var SCOPE = 'https://www.googleapis.com/auth/drive.file';
   var FILE_NAME = 'DPC-TKC-pricelist.json';     // ชื่อไฟล์ข้อมูลใน Drive
+  var FOLDER_NAME = 'Dynamic-PriceList';         // โฟลเดอร์เฉพาะใน Drive (สร้างอัตโนมัติ · ลากเข้า AAA-AI365 ได้)
   var LS_PREFIX = 'xls2';                         // เก็บ/กู้ทุก key ที่ขึ้นต้นด้วยนี้
-  var K_CLIENT = 'gdrive_client_id', K_FILEID = 'gdrive_file_id', K_LASTSYNC = 'gdrive_last_sync', K_AUTO = 'gdrive_auto';
+  var K_CLIENT = 'gdrive_client_id', K_FILEID = 'gdrive_file_id', K_FOLDERID = 'gdrive_folder_id', K_LASTSYNC = 'gdrive_last_sync', K_AUTO = 'gdrive_auto';
 
   var state = {
     gisReady: false, token: null, tokenExp: 0, tokenClient: null,
@@ -79,9 +80,42 @@
 
   function findFile() {
     var q = encodeURIComponent("name='" + FILE_NAME + "' and trashed=false");
-    return api('https://www.googleapis.com/drive/v3/files?q=' + q + '&spaces=drive&fields=files(id,name,modifiedTime)')
+    return api('https://www.googleapis.com/drive/v3/files?q=' + q + '&spaces=drive&fields=files(id,name,modifiedTime,parents)')
       .then(function (r) { return r.json(); })
       .then(function (d) { return (d.files && d.files[0]) || null; });
+  }
+
+  // หา/สร้างโฟลเดอร์เฉพาะของแอป (drive.file — เห็นเฉพาะโฟลเดอร์ที่แอปสร้าง)
+  function ensureFolder() {
+    var cached = localStorage.getItem(K_FOLDERID);
+    if (cached) {
+      return api('https://www.googleapis.com/drive/v3/files/' + cached + '?fields=id,trashed')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && d.id && !d.trashed) return d.id; localStorage.removeItem(K_FOLDERID); return findOrCreateFolder(); })
+        .catch(function () { return findOrCreateFolder(); });
+    }
+    return findOrCreateFolder();
+  }
+  function findOrCreateFolder() {
+    var q = encodeURIComponent("name='" + FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+    return api('https://www.googleapis.com/drive/v3/files?q=' + q + '&spaces=drive&fields=files(id,name)')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.files && d.files[0]) { localStorage.setItem(K_FOLDERID, d.files[0].id); return d.files[0].id; }
+        return api('https://www.googleapis.com/drive/v3/files?fields=id', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+        }).then(function (r) { return r.json(); }).then(function (f) { localStorage.setItem(K_FOLDERID, f.id); return f.id; });
+      });
+  }
+  // ย้ายไฟล์เข้าโฟลเดอร์ (ถ้ายังไม่อยู่) — ใช้ย้ายไฟล์เก่าที่อยู่ root เข้าโฟลเดอร์
+  function moveToFolder(fileId, folderId, curParents) {
+    if (!fileId || !folderId) return Promise.resolve();
+    if (curParents && curParents.indexOf(folderId) >= 0) return Promise.resolve();
+    var remove = (curParents && curParents.length) ? '&removeParents=' + curParents.join(',') : '';
+    return api('https://www.googleapis.com/drive/v3/files/' + fileId + '?addParents=' + folderId + remove + '&fields=id,parents',
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
   }
 
   function gather() {
@@ -99,7 +133,7 @@
     Object.keys(obj.data).forEach(function (k) { localStorage.setItem(k, obj.data[k]); });
   }
 
-  function uploadContent(fileId, content) {
+  function uploadContent(fileId, content, folderId) {
     if (fileId) {
       return api('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&fields=id,modifiedTime',
         { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content })
@@ -107,6 +141,7 @@
     }
     var boundary = '-------dpc' + Date.now();
     var meta = { name: FILE_NAME, mimeType: 'application/json' };
+    if (folderId) meta.parents = [folderId];   // สร้างไฟล์ใหม่ไว้ในโฟลเดอร์เฉพาะเลย
     var body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
       JSON.stringify(meta) + '\r\n--' + boundary +
       '\r\nContent-Type: application/json\r\n\r\n' + content + '\r\n--' + boundary + '--';
@@ -128,27 +163,36 @@
     state.busy = true; setStatus('กำลังอัปขึ้น Drive…', 'work');
     try { if (window.SG && SG.save) SG.save(); } catch (e) {}
     var content = JSON.stringify(gather());
+    var folderId = null;
     return getToken(false).then(function () {
-      var fid = localStorage.getItem(K_FILEID);
-      return withRetry(function () { return findFileOrId(fid); }).then(function (id) {
-        return withRetry(function () { return uploadContent(id, content); });
-      });
+      return withRetry(function () { return ensureFolder(); });
+    }).then(function (fid2) {
+      folderId = fid2;
+      return withRetry(function () { return findExisting(); });
+    }).then(function (existing) {
+      var fileId = existing && existing.id;
+      // ย้ายไฟล์เก่าที่อยู่ root เข้าโฟลเดอร์ (ครั้งเดียว)
+      var mv = (fileId && existing.parents) ? moveToFolder(fileId, folderId, existing.parents) : Promise.resolve();
+      return mv.then(function () { return withRetry(function () { return uploadContent(fileId, content, folderId); }); });
     }).then(function (res) {
       if (res && res.id) localStorage.setItem(K_FILEID, res.id);
       localStorage.setItem(K_LASTSYNC, new Date().toISOString());
-      state.busy = false; setStatus('อัปขึ้น Drive สำเร็จ ✓', 'ok'); render();
+      state.busy = false; setStatus('อัปขึ้น Drive สำเร็จ ✓ · โฟลเดอร์: ' + FOLDER_NAME, 'ok'); render();
     }).catch(function (e) {
       state.busy = false; setStatus('อัปไม่สำเร็จ: ' + e.message, 'err'); render();
       if (!silent) console.warn('[GDrive upload]', e);
     });
   }
-  function findFileOrId(fid) {
+  // หาไฟล์เดิม (คืน id+parents) — จาก cache ก่อน ไม่มีค่อยค้นจากชื่อ
+  function findExisting() {
+    var fid = localStorage.getItem(K_FILEID);
     if (fid) {
-      return api('https://www.googleapis.com/drive/v3/files/' + fid + '?fields=id')
-        .then(function (r) { return r.ok ? fid : findFile().then(function (f) { return f && f.id; }); })
-        .catch(function () { return findFile().then(function (f) { return f && f.id; }); });
+      return api('https://www.googleapis.com/drive/v3/files/' + fid + '?fields=id,parents,trashed')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && d.id && !d.trashed) return d; return findFile(); })
+        .catch(function () { return findFile(); });
     }
-    return findFile().then(function (f) { return f && f.id; });
+    return findFile();
   }
 
   function download() {
@@ -228,7 +272,7 @@
             '<input id="gdClient" placeholder="xxxx.apps.googleusercontent.com" />' +
             '<div class="gd-hint">ปกติไม่ต้องแก้ — ใส่เองเฉพาะกรณีเปลี่ยนโปรเจกต์ Google</div>' +
           '</details>' +
-          '<div class="gd-note">🔒 ใช้สิทธิ์ <b>drive.file</b> — โปรแกรมเห็นเฉพาะไฟล์ที่ตัวเองสร้างใน Drive ของคุณ ไม่ยุ่งไฟล์อื่น</div>' +
+          '<div class="gd-note">🔒 ใช้สิทธิ์ <b>drive.file</b> — โปรแกรมเห็นเฉพาะไฟล์ที่ตัวเองสร้างใน Drive ของคุณ ไม่ยุ่งไฟล์อื่น<br>📁 เก็บไฟล์ไว้ในโฟลเดอร์ <b>DYNAMIC PRICE LIST (TKC)</b> อัตโนมัติ</div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(m);
