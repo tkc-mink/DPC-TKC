@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>แก้ราคายาง — Excel เต็มรูปแบบ (v2)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&family=Prompt:wght@400;700&family=Kanit:wght@400;700&family=Noto+Sans+Thai:wght@400;700&display=swap" />
+<link rel="stylesheet" href="app-xls2/xls2.css" />
+</head>
+<body>
+<div class="app">
+
+  <div class="ribbon">
+    <div class="brand">
+      <image-slot id="brand-logo" class="logo-img" shape="rounded" radius="8" fit="contain" nochrome placeholder="โลโก้" title="ลากรูปโลโก้ร้านมาวาง หรือคลิกเพื่อเลือกไฟล์"></image-slot>
+      <div class="ttl" id="brandTtl">แก้ราคายาง v2<small>Excel เต็มรูปแบบ</small></div>
+    </div>
+
+    <div class="grp">
+      <button class="btn primary" id="btnQuickSave" title="บันทึก (Ctrl+S)"><span class="ic">💾</span></button>
+      <div class="swatchwrap">
+        <button class="btn" id="btnFile" title="ไฟล์ — บันทึก / บันทึกเป็นชื่อใหม่ / เปิดไฟล์เก่า"><span class="ic">🗂️</span><span class="tx">ไฟล์</span> ▾</button>
+        <div class="swpop filepop" id="filePop">
+          <div class="lbl">จัดการไฟล์</div>
+          <button class="btn" id="btnSaveAs" title="บันทึกเป็นชื่อ/เวอร์ชันใหม่ (เก็บสำเนาแยก)"><span class="ic">🆕</span><span class="tx">บันทึกเป็นชื่อใหม่…</span></button>
+          <button class="btn" id="btnVersions" title="เปิดไฟล์/เวอร์ชันที่บันทึกไว้ · โหลดต้นฉบับ"><span class="ic">🕓</span><span class="tx">เปิดไฟล์เก่า…</span></button>
+          <button class="btn" id="btnBackup" title="ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมดลงเครื่อง (.json) — เก็บไว้กันข้อมูลหาย / ย้ายเครื่อง"><span class="ic">💾</span><span class="tx">สำรองลงเครื่อง…</span></button>
+          <button class="btn" id="btnRestore" title="กู้คืนข้อมูลจากไฟล์สำรอง (.json) — แทนที่ข้อมูลปัจจุบัน"><span class="ic">♻️</span><span class="tx">กู้คืนจากไฟล์…</span></button>
+          <button class="btn" id="btnGDrive" title="ซิงค์ข้อมูลขึ้น Google Drive — เก็บบนคลาวด์ เปิดได้ทุกเครื่อง"><span class="ic">☁️</span><span class="tx">Google Drive…</span></button>
+          <input type="file" id="restoreFile" accept=".json,application/json" style="display:none;" />
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <button class="btn" id="btnUndo" title="ย้อนกลับ (Ctrl+Z)"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><path d="M5.5 6H10a3.6 3.6 0 0 1 0 7.2H6" fill="none" stroke="#333" stroke-width="2.1" stroke-linecap="round"></path><path d="M6.7 3L3 6l3.7 3" fill="none" stroke="#333" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></button>
+      <button class="btn" id="btnRedo" title="ทำซ้ำ (Ctrl+Y)"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><path d="M10.5 6H6a3.6 3.6 0 0 0 0 7.2h4" fill="none" stroke="#333" stroke-width="2.1" stroke-linecap="round"></path><path d="M9.3 3L13 6l-3.7 3" fill="none" stroke="#333" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></button>
+    </div>
+
+    <div class="grp grp-fx">
+      <div class="namebox" id="nameBox">A1</div>
+      <span class="fxlab">fx</span>
+      <input id="fx" placeholder="พิมพ์ค่า หรือสูตร เช่น =H9-G9 · =COGS(G9)" autocomplete="off" />
+    </div>
+
+    <div class="grp grp-status">
+      <button class="schedchip" id="schedChip" title="ตั้งเวลาที่ราคาชุดนี้จะเริ่มมีผลใน DB">⏱ ทันที</button>
+      <button class="schedchip" id="condChip" title="ตั้งค่า — สี ± Margin · ออโต้เซฟ · Telegram/AI · ธีม · คีย์ลัด">⚙️</button>
+      <span id="saveState" class="clean">✓ บันทึกแล้ว</span>
+    </div>
+
+    <div class="grp">
+      <button class="btn" id="btnAddSize" title="เพิ่มขนาดยางใหม่ต่อท้ายกลุ่มปัจจุบัน"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><circle cx="6.6" cy="8.4" r="5.1" fill="none" stroke="#333" stroke-width="1.6"></circle><circle cx="6.6" cy="8.4" r="1.9" fill="none" stroke="#333" stroke-width="1.6"></circle><circle cx="12.6" cy="3.8" r="3.3" fill="#0a8f3c"></circle><path d="M12.6 2.3v3M11.1 3.8h3" stroke="#fff" stroke-width="1.3"></path></svg></span><span class="tx">เพิ่มขนาด</span></button>
+      <button class="btn danger" id="btnDelSize" title="ลบขนาดยางทั้งกลุ่มที่เลือก"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><circle cx="6.6" cy="8.4" r="5.1" fill="none" stroke="#333" stroke-width="1.6"></circle><circle cx="6.6" cy="8.4" r="1.9" fill="none" stroke="#333" stroke-width="1.6"></circle><circle cx="12.6" cy="3.8" r="3.3" fill="#d62828"></circle><path d="M11.5 2.7l2.2 2.2M13.7 2.7l-2.2 2.2" stroke="#fff" stroke-width="1.3"></path></svg></span><span class="tx">ลบขนาด</span></button>
+      <button class="btn" id="btnAddModel" title="เพิ่มรุ่นใหม่ใต้แถวที่เลือก (ในกลุ่มขนาดเดิม พร้อมสูตรครบ)"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="1.5" y="3" width="9" height="1.9" rx="0.6" fill="#333"></rect><rect x="1.5" y="6.7" width="9" height="1.9" rx="0.6" fill="#333"></rect><rect x="1.5" y="10.4" width="6" height="1.9" rx="0.6" fill="#bbb"></rect><circle cx="12.6" cy="11.2" r="3.4" fill="#0a8f3c"></circle><path d="M12.6 9.7v3M11.1 11.2h3" stroke="#fff" stroke-width="1.3"></path></svg></span><span class="tx">เพิ่มรุ่น</span></button>
+      <button class="btn danger" id="btnDelRow" title="ลบแถวที่เลือก"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="1.5" y="3" width="9" height="1.9" rx="0.6" fill="#333"></rect><rect x="1.5" y="6.7" width="9" height="1.9" rx="0.6" fill="#333"></rect><rect x="1.5" y="10.4" width="6" height="1.9" rx="0.6" fill="#bbb"></rect><circle cx="12.6" cy="11.2" r="3.4" fill="#d62828"></circle><path d="M11.5 10.1l2.2 2.2M13.7 10.1l-2.2 2.2" stroke="#fff" stroke-width="1.3"></path></svg></span><span class="tx">ลบแถว</span></button>
+      <button class="btn" id="btnMerge" title="ผสาน/ยกเลิกผสานเซลล์ที่เลือก"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9" rx="1" fill="none" stroke="#333" stroke-width="1.3"></rect><path d="M8 3.7v1.7M8 10.6v1.7" stroke="#333" stroke-width="1.2" stroke-dasharray="1.4 1.2"></path><path d="M5.4 8h5.2" stroke="#F47C20" stroke-width="1.3"></path><path d="M7 6.4L5.4 8 7 9.6M9 6.4L10.6 8 9 9.6" fill="none" stroke="#F47C20" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span class="tx">ผสาน</span></button>
+      <div class="swatchwrap">
+        <button class="btn" id="btnBorder" title="ตีเส้นตารางให้ช่องที่เลือก (แบบ Excel) · ไอคอนแสดงสี/ลายเส้นที่เลือกอยู่"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" fill="none" stroke="#dcdcdc" stroke-width="0.8"></rect><line id="bdIH" x1="2" y1="8" x2="14" y2="8" stroke="transparent" stroke-width="1.3"></line><line id="bdIV" x1="8" y1="2" x2="8" y2="14" stroke="transparent" stroke-width="1.3"></line><line id="bdT" x1="1.6" y1="2" x2="14.4" y2="2" stroke="transparent" stroke-width="1.8"></line><line id="bdB" x1="1.6" y1="14" x2="14.4" y2="14" stroke="#000" stroke-width="1.8"></line><line id="bdL" x1="2" y1="1.6" x2="2" y2="14.4" stroke="transparent" stroke-width="1.8"></line><line id="bdR" x1="14" y1="1.6" x2="14" y2="14.4" stroke="transparent" stroke-width="1.8"></line></svg></span><span class="tx">เส้นขอบ</span><span class="fc-caret">▾</span></button>
+        <div class="swpop bdpop" id="bdPop">
+          <div class="lbl">ตีเส้นช่องที่เลือก</div>
+          <div class="lbl" style="margin-top:2px;">สีเส้น:</div>
+          <div class="bd-opts" id="bdColors">
+            <span class="sw bd-c on" data-bdc="000000" style="background:#000;" title="ดำ"></span>
+            <span class="sw bd-c" data-bdc="FF0000" style="background:#FF0000;" title="แดง"></span>
+            <span class="sw bd-c" data-bdc="0000FF" style="background:#0000FF;" title="น้ำเงิน"></span>
+            <span class="sw bd-c" data-bdc="008000" style="background:#008000;" title="เขียว"></span>
+            <span class="sw bd-c" data-bdc="F47C20" style="background:#F47C20;" title="ส้ม"></span>
+            <span class="sw bd-c" data-bdc="7F1D9B" style="background:#7F1D9B;" title="ม่วง"></span>
+            <span class="sw bd-c" data-bdc="C0A000" style="background:#C0A000;" title="ทอง"></span>
+            <span class="sw bd-c" data-bdc="888888" style="background:#888888;" title="เทา"></span>
+            <input type="color" id="bdCustom" value="#000000" title="เลือกสีเส้นเอง" style="width:22px;height:20px;border:1px solid #c4c4c4;border-radius:4px;padding:0;cursor:pointer;vertical-align:middle;">
+          </div>
+          <div class="lbl">ลายเส้น:</div>
+          <div class="bd-opts bdstyle-grid" id="bdStyles">
+            <span class="bd-s on" data-bds="solid" style="--st:solid" title="เส้นทึบ"></span>
+            <span class="bd-s" data-bds="dotted" style="--st:dotted" title="จุด"></span>
+            <span class="bd-s" data-bds="dashed" style="--st:dashed" title="ประห่าง"></span>
+            <span class="bd-s" data-bds="double" style="--st:double" title="เส้นคู่"></span>
+            <span class="bd-s" data-bds="groove" style="--st:groove" title="ร่อง"></span>
+            <span class="bd-s" data-bds="ridge" style="--st:ridge" title="สัน"></span>
+            <span class="bd-s" data-bds="inset" style="--st:inset" title="จม"></span>
+            <span class="bd-s" data-bds="outset" style="--st:outset" title="นูน"></span>
+            <span class="bd-s" data-bds="dashed-thick" style="--st:dashed" title="ประหนา"></span>
+          </div>
+          <div class="lbl">ความหนาเส้น:</div>
+          <div class="bd-opts" id="bdWeights">
+            <span class="bd-w" data-bdw="0.5" title="บางพิเศษ (เส้นผม)"><i style="height:0.5px;"></i>บาง</span>
+            <span class="bd-w on" data-bdw="1" title="ปกติ 1px"><i style="height:1px;"></i>ปกติ</span>
+            <span class="bd-w" data-bdw="2" title="หนา 2px"><i style="height:2px;"></i>หนา</span>
+            <span class="bd-w" data-bdw="3" title="หนาพิเศษ 3px"><i style="height:3px;"></i>พิเศษ</span>
+          </div>
+          <div class="bd-grid">
+          <div class="bd-it" data-bd="all" title="เส้นขอบทั้งหมด"><span class="bd-box bd-all"></span></div>
+          <div class="bd-it" data-bd="outer" title="เส้นขอบนอก"><span class="bd-box bd-outer"></span></div>
+          <div class="bd-it" data-bd="outer-thick" title="เส้นขอบนอกหนา"><span class="bd-box bd-outer-th"></span></div>
+          <div class="bd-it" data-bd="topbottom" title="เส้นบน+ล่าง"><span class="bd-box bd-b"></span></div>
+          <div class="bd-it" data-bd="bottom" title="เส้นล่าง"><span class="bd-box bd-b"></span></div>
+          <div class="bd-it" data-bd="bottom-thick" title="เส้นล่างหนา"><span class="bd-box bd-b-th"></span></div>
+          <div class="bd-it" data-bd="top" title="เส้นบน"><span class="bd-box bd-t"></span></div>
+          <div class="bd-it" data-bd="left" title="เส้นซ้าย"><span class="bd-box bd-l"></span></div>
+          <div class="bd-it" data-bd="right" title="เส้นขวา"><span class="bd-box bd-r"></span></div>
+          </div>
+          <div class="bd-it bd-none-it" data-bd="none"><span class="bd-box"></span>ไม่มีเส้น (คืนเส้นตารางปกติ)</div>
+          <div class="lbl" style="margin-top:5px;">🧽 ยางลบเส้น (ลบทีละด้าน):</div>
+          <div class="bd-grid">
+            <div class="bd-it bd-erase" data-bd="erase-top" title="ลบเส้นบน"><span class="bd-box bd-t"></span></div>
+            <div class="bd-it bd-erase" data-bd="erase-bottom" title="ลบเส้นล่าง"><span class="bd-box bd-b"></span></div>
+            <div class="bd-it bd-erase" data-bd="erase-left" title="ลบเส้นซ้าย"><span class="bd-box bd-l"></span></div>
+            <div class="bd-it bd-erase" data-bd="erase-right" title="ลบเส้นขวา"><span class="bd-box bd-r"></span></div>
+            <div class="bd-it bd-erase" data-bd="erase-all" title="ลบทุกเส้น"><span class="bd-box bd-all"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <select id="fontFam" title="แบบตัวอักษร (ใช้กับช่องที่เลือก)">
+        <option value="">🔤 ฟอนต์</option>
+        <optgroup label="อังกฤษ (แบบ Excel)">
+          <option value="Arial" style="font-family:Arial;">Arial · ค่าเริ่มต้น</option>
+          <option value="Arial Black" style="font-family:'Arial Black';">Arial Black ⭐</option>
+          <option value="Tahoma" style="font-family:Tahoma;">Tahoma</option>
+          <option value="Calibri" style="font-family:Calibri;">Calibri</option>
+          <option value="Cambria" style="font-family:Cambria;">Cambria</option>
+          <option value="Segoe UI" style="font-family:'Segoe UI';">Segoe UI</option>
+          <option value="Times New Roman" style="font-family:'Times New Roman';">Times New Roman</option>
+          <option value="Courier New" style="font-family:'Courier New';">Courier New</option>
+          <option value="Verdana" style="font-family:Verdana;">Verdana</option>
+          <option value="Georgia" style="font-family:Georgia;">Georgia</option>
+          <option value="Impact" style="font-family:Impact;">Impact</option>
+        </optgroup>
+        <optgroup label="ไทย">
+          <option value="Sarabun" style="font-family:Sarabun;">สารบรรณ (Sarabun)</option>
+          <option value="Prompt" style="font-family:Prompt;">พรอมพต์ (Prompt)</option>
+          <option value="Kanit" style="font-family:Kanit;">คนิต (Kanit)</option>
+          <option value="Noto Sans Thai" style="font-family:'Noto Sans Thai';">Noto Sans Thai</option>
+          <option value="Leelawadee UI" style="font-family:'Leelawadee UI';">ลีลาวดี (Leelawadee UI)</option>
+          <option value="Angsana New" style="font-family:'Angsana New';">อังศนา (Angsana New)</option>
+          <option value="Cordia New" style="font-family:'Cordia New';">คอร์เดีย (Cordia New)</option>
+        </optgroup>
+      </select>
+      <span class="fssize" id="fsWrap" title="ขนาดตัวอักษร">
+        <input id="fsBox" inputmode="numeric" value="10" />
+        <span class="fssteps">
+          <button id="btnFsUp" class="fsstep-b" title="เพิ่มขนาดตัวอักษร">▲</button>
+          <button id="btnFsDn" class="fsstep-b" title="ลดขนาดตัวอักษร">▼</button>
+        </span>
+      </span>
+      <button class="btn bld" id="btnBold" title="ตัวหนา (Ctrl+B)">B</button>
+      <button class="btn itl" id="btnItalic" title="ตัวเอียง (Ctrl+I)">I</button>
+      <button class="btn und" id="btnUnder" title="ขีดเส้นใต้ (Ctrl+U)">U</button>
+      <button class="btn" id="btnAlign" title="จัดข้อความ: ชิดซ้าย → กึ่งกลาง → ชิดขวา (คลิกเพื่อสลับ)"><span class="al-ic l"><i></i><i></i><i></i></span></button>
+      <button class="btn" id="btnValign" title="จัดแนวตั้ง: ชิดบน → กึ่งกลาง → ชิดล่าง (คลิกเพื่อสลับ)"><span class="va-ic t"><i></i></span></button>
+      <div class="swatchwrap">
+        <button class="btn" id="btnFill" title="เทสีพื้นช่อง (เลือกสีได้)"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><g transform="rotate(-12 8 8)"><rect class="fill-pool" x="3.2" y="6.2" width="8" height="5.4" rx="1" fill="#FFEB3B" stroke="#333" stroke-width="1.2"></rect><path d="M7.2 1.6v4.6" stroke="#333" stroke-width="1.3" stroke-linecap="round"></path><circle cx="7.2" cy="1.6" r="1" fill="#333"></circle><path d="M3.2 8h8" stroke="#333" stroke-width="1"></path></g><path class="fill-drip" d="M13.4 9.4c.95 1.4 1.5 2.3 1.5 3.05a1.5 1.5 0 1 1-3 0c0-.75.55-1.65 1.5-3.05z" fill="#FFEB3B" stroke="#333" stroke-width="0.8"></path></svg></span><span class="tx">เทสี</span><span class="fc-caret">▾</span></button>
+        <div class="swpop" id="swPop"><div class="lbl">สีพื้นช่อง</div><div class="swgrid" id="swGrid"></div></div>
+      </div>
+      <div class="swatchwrap">
+        <button class="btn" id="btnFont" title="คลิก A = ใช้สีล่าสุด · คลิก ▾ = เลือกสีใหม่"><span class="ic" style="font-weight:800;color:#C00000;">A</span><span class="tx">สีอักษร</span><span class="fc-caret">▾</span></button>
+        <div class="swpop" id="fontPop"><div class="lbl">สีตัวอักษร</div><div class="swgrid" id="fontGrid"></div></div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <button class="btn" id="btnTypeNum" title="กำหนดช่องที่เลือกเป็นตัวเลข"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><text x="8" y="11.4" text-anchor="middle" font-size="9.5" font-weight="800" font-family="Arial,sans-serif" fill="#1d6f42">123</text></svg></span><span class="tx">ตัวเลข</span></button>
+      <button class="btn" id="btnDpUp" title="เพิ่มทศนิยม (เช่น 1,500 → 1,500.0)" style="font-family:Consolas,monospace;font-size:11px;">.00→</button>
+      <button class="btn" id="btnDpDn" title="ลดทศนิยม" style="font-family:Consolas,monospace;font-size:11px;">←.0</button>
+      <button class="btn" id="btnTypeText" title="กำหนดช่องที่เลือกเป็นข้อความ"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><text x="8" y="11.4" text-anchor="middle" font-size="9.5" font-weight="800" font-family="Arial,sans-serif" fill="#2A6FDB">Abc</text></svg></span><span class="tx">ข้อความ</span></button>
+      <button class="btn" id="btnDB" title="ลิงก์ช่องนี้กับฐานข้อมูลด้วยรหัสสินค้า"><span class="ic">🗄️</span><span class="tx">ลิงก์ DB</span></button>
+      <button class="btn primary" id="btnSync" title="อัพเดทราคา — เลือกเวลา → สรุป → ยืนยัน แล้วส่งราคาตั้ง/B/A/S เข้า DB"><span class="ic">📤</span><span class="tx">อัพเดท</span></button>
+    </div>
+
+    <div class="grp">
+      <button class="btn on" id="btnMode" title="สลับโหมด แอดมิน ⇄ ผู้ใช้ (คลิกเพื่อสลับ)"><span class="ic">🛠️</span><span class="tx">แอดมิน</span></button>
+      <div class="swatchwrap">
+        <button class="btn" id="btnMore" title="เครื่องมือเพิ่มเติมฯ (ลากไอคอนมาเก็บได้)"><span class="ic">⋯</span><span class="more-badge" id="moreBadge" style="display:none;"></span></button>
+        <div class="swpop morepop" id="morePop">
+          <div class="lbl">เครื่องมือเพิ่มเติม</div>
+          <button class="btn" id="btnLockRow" title="ซ่อน/แสดงแถวที่เลือกจากผู้ใช้"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="1.3" y="3" width="8.7" height="10" rx="1" fill="none" stroke="#333" stroke-width="1.1"></rect><line x1="1.3" y1="6.3" x2="10" y2="6.3" stroke="#333" stroke-width="1"></line><line x1="1.3" y1="9.7" x2="10" y2="9.7" stroke="#333" stroke-width="1"></line><path d="M11 9V8.1a1.3 1.3 0 0 1 2.6 0V9" fill="none" stroke="#F47C20" stroke-width="1.1"></path><rect x="10.1" y="9" width="4.6" height="4" rx="0.8" fill="#F47C20"></rect></svg></span><span class="tx">ซ่อนแถวจากผู้ใช้</span></button>
+          <button class="btn" id="btnLockCol" title="ซ่อน/แสดงคอลัมน์ที่เลือกจากผู้ใช้"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="1.3" y="3" width="8.7" height="10" rx="1" fill="none" stroke="#333" stroke-width="1.1"></rect><line x1="4.2" y1="3" x2="4.2" y2="13" stroke="#333" stroke-width="1"></line><line x1="7.1" y1="3" x2="7.1" y2="13" stroke="#333" stroke-width="1"></line><path d="M11 9V8.1a1.3 1.3 0 0 1 2.6 0V9" fill="none" stroke="#F47C20" stroke-width="1.1"></path><rect x="10.1" y="9" width="4.6" height="4" rx="0.8" fill="#F47C20"></rect></svg></span><span class="tx">ซ่อนคอลัมน์จากผู้ใช้</span></button>
+          <button class="btn" id="btnSecret" title="ซ่อนเลขในคอลัมน์ 🔒 (เหลือรหัสลับ)"><span class="ic">🙈</span><span class="tx">ซ่อนเลข</span></button>
+          <button class="btn" id="btnTheme" title="สลับโหมดมืด/สว่าง"><span class="ic" id="themeIc">🌙</span><span class="tx">โหมดมืด</span></button>
+          <button class="btn" id="btnKeys" title="คีย์ลัดทั้งหมด + Logitech G-keys"><span class="ic"><svg class="ic-svg" viewBox="0 0 16 16"><rect x="0.8" y="3.6" width="14.4" height="8.8" rx="1.6" fill="none" stroke="#333" stroke-width="1.1"></rect><g fill="#333"><rect x="2.6" y="5.5" width="1.5" height="1.4" rx="0.3"></rect><rect x="5" y="5.5" width="1.5" height="1.4" rx="0.3"></rect><rect x="7.3" y="5.5" width="1.5" height="1.4" rx="0.3"></rect><rect x="9.6" y="5.5" width="1.5" height="1.4" rx="0.3"></rect><rect x="11.9" y="5.5" width="1.5" height="1.4" rx="0.3"></rect><rect x="2.6" y="7.8" width="1.5" height="1.4" rx="0.3"></rect><rect x="5" y="7.8" width="1.5" height="1.4" rx="0.3"></rect><rect x="7.3" y="7.8" width="1.5" height="1.4" rx="0.3"></rect><rect x="9.6" y="7.8" width="1.5" height="1.4" rx="0.3"></rect><rect x="11.9" y="7.8" width="1.5" height="1.4" rx="0.3"></rect><rect x="4.2" y="10.1" width="7.6" height="1.4" rx="0.4"></rect></g></svg></span><span class="tx">คีย์ลัด</span></button>
+          <button class="btn" id="btnImgAdd" title="แนบไฟล์รูปจากเครื่องลงบนตาราง (หรือลากไฟล์/วาง Ctrl+V ก็ได้)"><span class="ic">🖼️</span><span class="tx">แนบรูป</span></button>
+          <button class="btn" id="btnImgSearch" title="ค้นรูปใน Google แล้วคัดลอกมาวาง"><span class="ic">🔎</span><span class="tx">ค้นรูป Google</span></button>
+          <button class="btn" id="btnDupHi" title="ไฮไลต์ค่าที่ซ้ำกัน — ค่าเดียวกันได้สีเดียวกัน (กดอีกครั้งเอาออก)"><span class="ic">🌈</span><span class="tx">ไฮไลต์ค่าซ้ำ</span></button>
+          <button class="btn" id="btnApi" title="ปลั๊กอินบอท Telegram / AI LOCAL (API)"><span class="ic">🔌</span><span class="tx">Telegram API</span></button>
+          <button class="btn" id="btnPrint" title="พิมพ์ A4 (Ctrl+P)"><span class="ic">🖨️</span><span class="tx">พิมพ์</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- แถว 2: ช่องค้นหา (ขึ้นมาแทนตำแหน่ง fx เดิม) -->
+  <div class="fxbar">
+    <div class="sheetbar">
+      <select id="sheetSel" class="flt-sel" title="เลือกหมวดยาง" style="font-weight:700;max-width:170px;"></select>
+      <button class="sheet-mini" id="shAdd" title="สร้างหมวดใหม่">➕</button>
+      <button class="sheet-mini" id="shRen" title="แก้ไขชื่อหมวดนี้">✏️</button>
+      <button class="sheet-mini" id="shDel" title="ลบหมวดนี้ (ยืนยัน 2 รอบ + รอ 10 วินาที)">🗑️</button>
+    </div>
+  </div>
+
+  <!-- filter / search bar -->
+  <div class="fltbar" id="fltbar"></div>
+
+  <div id="archBanner" style="display:none;background:#FFF3E6;color:#A34A00;font-weight:700;font-size:12px;padding:7px 12px;border-bottom:1px solid #F3D9A6;display:none;align-items:center;gap:8px;">🔒 กำลังดูไฟล์ประวัติ (หลังอัพเดทราคา) — ดูย้อนหลังได้อย่างเดียว แก้ไขไม่ได้ · เลือกหมวดปกติด้านบนเพื่อกลับไปแก้ไข</div>
+
+  <div class="gridwrap" id="gridwrap">
+    <div id="grid" style="position:relative;display:inline-block;min-width:100%;"></div>
+  </div>
+
+  <div class="statusbar">
+    <span id="status"></span>
+    <span class="sumbox" id="sumbox"></span>
+    <span class="right">
+      <span style="color:#888;">คลิกขวา = เมนูแบบ Excel</span>
+      <button class="zb" id="zOut">−</button><span id="zVal">100%</span><button class="zb" id="zIn">+</button>
+    </span>
+  </div>
+</div>
+
+<div class="sg-ctx" id="ctx"></div>
+
+<div class="modal" id="mSaveAs">
+  <div class="dlg">
+    <h3>บันทึกเป็นเวอร์ชันใหม่</h3>
+    <div class="bd">ตั้งชื่อเวอร์ชันนี้ (เก็บแยก เรียกกลับมาได้)<input id="saveAsName" /></div>
+    <div class="ft"><button class="btn" data-close>ยกเลิก</button><button class="btn primary" id="saveAsOk">บันทึก</button></div>
+  </div>
+</div>
+
+<div class="modal" id="mVersions">
+  <div class="dlg">
+    <h3>เวอร์ชันที่บันทึกไว้</h3>
+    <div class="bd">
+      <button class="btn" id="btnReset">↺ โหลดต้นฉบับจาก Excel ใหม่</button>
+      <div class="vlist" id="vList"></div>
+    </div>
+    <div class="ft"><button class="btn" data-close>ปิด</button></div>
+  </div>
+</div>
+
+<div class="modal" id="mSched">
+  <div class="dlg">
+    <h3>⏱ ตั้งเวลาเริ่มใช้ราคาชุดนี้</h3>
+    <div class="bd">
+      เมื่อกด “📤 ส่ง DB” ราคาตั้ง/B/A/S ของแถวที่ลิงก์จะไปอัปเดตเป็นราคาขายช่อง 1/2/3/4 ตามเวลาที่ตั้งนี้
+      <input type="datetime-local" id="schedInput" />
+      <div style="margin-top:8px;color:#888;font-size:11px;">ตั้งเฉพาะบางแถว: คลิกขวาที่แถวนั้น → “ตั้งเวลาใช้ราคาเฉพาะแถวนี้”</div>
+    </div>
+    <div class="ft">
+      <button class="btn" id="schedNow">มีผลทันที</button>
+      <button class="btn" data-close>ยกเลิก</button>
+      <button class="btn primary" id="schedOk">บันทึกเวลา</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mCond">
+  <div class="dlg">
+    <h3>⚙️ ตั้งค่า</h3>
+    <div class="settabs">
+      <button class="settab on" data-tab="margin">± สี Margin</button>
+      <button class="settab" data-tab="autosave">⏱ ออโต้เซฟ</button>
+      <button class="settab" data-tab="api">🔌 Telegram/AI</button>
+      <button class="settab" data-tab="theme">🌙 ธีม</button>
+      <button class="settab" data-tab="keys">⌨️ คีย์ลัด</button>
+      <button class="settab" data-tab="drag">⬛ สีลากเลือก</button>
+      <button class="settab" data-tab="clip">✂️ สีคัดลอก/ตัด</button>
+      <button class="settab" data-tab="rowhdr">⬅ สีหัวแถว</button>
+      <button class="settab" data-tab="colhdr">⬆ สีหัวคอลัมน์</button>
+      <button class="settab" data-tab="special">🔒 แถว/คอลัมน์พิเศษ</button>
+    </div>
+    <div class="bd settab-pane" data-pane="margin" id="condTabMargin">
+      <div style="margin-bottom:6px;">Margin เป็นบวก (+) ใช้สี:</div>
+      <div class="swgrid" id="condPosGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div style="margin:12px 0 6px;">Margin ติดลบ (−) ใช้สี:</div>
+      <div class="swgrid" id="condNegGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div style="margin-top:12px;font-size:12px;">ตัวอย่าง: <b id="condPrevPos">+490</b> &nbsp; <b id="condPrevNeg">-250</b></div>
+    </div>
+    <div class="bd settab-pane" data-pane="autosave" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:10px;">ตั้งช่วงเวลาบันทึกอัตโนมัติ (ปัจจุบันแสดงตัวนับถอยหลังที่หัวโปรแกรม)</div>
+      <button class="btn primary" id="setAutosave">⏱ ปรับเวลาออโต้เซฟ…</button>
+    </div>
+    <div class="bd settab-pane" data-pane="api" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:10px;">เชื่อมบอท Telegram / AI LOCAL ผ่าน API (เช็ค/แก้ราคาจากระยะไกล)</div>
+      <button class="btn primary" id="setApi">🔌 เปิดตั้งค่า Telegram API…</button>
+    </div>
+    <div class="bd settab-pane" data-pane="theme" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:10px;">สลับโหมดมืด / สว่าง ของหน้าจอ</div>
+      <button class="btn primary" id="setTheme">🌙 สลับโหมดมืด/สว่าง</button>
+    </div>
+    <div class="bd settab-pane" data-pane="keys" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:10px;">ดูคีย์ลัดทั้งหมด + การตั้งค่าปุ่ม Logitech</div>
+      <button class="btn primary" id="setKeys">⌨️ เปิดตารางคีย์ลัด…</button>
+    </div>
+    <div class="bd settab-pane" data-pane="drag" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:8px;">สีตอนลากเลือก/ลากคัดลอกช่อง (drag-fill)</div>
+      <div class="marklbl">สีเส้น (ทึบ):</div>
+      <div class="swgrid markgrid" id="dragGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">สีพื้นหลัง:</div>
+      <div class="swgrid markgrid" id="dragBgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="markprev"><span class="markprev-cell" id="dragPrev">ตัวอย่าง</span></div>
+    </div>
+    <div class="bd settab-pane" data-pane="clip" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:8px;">สีตอนคัดลอก/ตัด/วาง (copy · cut · paste)</div>
+      <div class="marklbl">สีเส้น (ประวิ่ง):</div>
+      <div class="swgrid markgrid" id="clipGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">สีพื้นหลัง:</div>
+      <div class="swgrid markgrid" id="clipBgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="markprev"><span class="markprev-cell" id="clipPrev">ตัวอย่าง</span></div>
+    </div>
+    <div class="bd settab-pane" data-pane="rowhdr" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:8px;">สีแถบหัวแถว (เลข 1·2·3 ด้านซ้าย) — ตกแต่งแยกจากคอลัมน์</div>
+      <div class="marklbl">สีพื้นแถบ:</div>
+      <div class="swgrid markgrid" id="rowhdrBgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">สีตัวเลขแถว:</div>
+      <div class="swgrid markgrid" id="rowhdrFgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="markprev"><span class="markprev-cell" id="rowhdrPrev" style="outline:none;">1 · 2 · 3</span></div>
+    </div>
+    <div class="bd settab-pane" data-pane="colhdr" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:8px;">สีแถบหัวคอลัมน์ (A·B·C ด้านบน) — ตกแต่งแยกจากแถว</div>
+      <div class="marklbl">สีพื้นแถบ:</div>
+      <div class="swgrid markgrid" id="colhdrBgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">สีตัวอักษรคอลัมน์:</div>
+      <div class="swgrid markgrid" id="colhdrFgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="markprev"><span class="markprev-cell" id="colhdrPrev" style="outline:none;">A · B · C</span></div>
+    </div>
+    <div class="bd settab-pane" data-pane="special" style="display:none;">
+      <div style="font-size:13px;color:#555;margin-bottom:8px;">แถว/คอลัมน์ที่ล็อก 🔒 (ซ่อนจากผู้ใช้ · เห็นเฉพาะแอดมิน)</div>
+      <div class="marklbl">สีพื้นหลัง:</div>
+      <div class="swgrid markgrid" id="admBgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">สีตัวอักษร:</div>
+      <div class="swgrid markgrid" id="admFgGrid" style="grid-template-columns:repeat(8,1fr);"></div>
+      <div class="marklbl">ลักษณะพื้นหลัง:</div>
+      <div class="patpick" id="admPatPick">
+        <span class="pat-opt" data-pat="stripe">▨ ลายทแยง</span>
+        <span class="pat-opt" data-pat="dots">⠿ จุด</span>
+        <span class="pat-opt" data-pat="none">▭ พื้นเรียบ</span>
+      </div>
+      <div class="marklbl">ไอคอนกำกับ (แทนแม่กุญแจ):</div>
+      <div class="iconpick" id="lockIconPick"></div>
+      <div class="admprev" id="admPrev">ตัวอย่างแถว/คอลัมน์พิเศษ 🔒</div>
+    </div>
+    <div class="ft"><button class="btn" data-close>ยกเลิก</button><button class="btn primary" id="condOk">บันทึก</button></div>
+  </div>
+</div>
+
+<div class="modal" id="mDelSheet">
+  <div class="dlg">
+    <h3 style="background:#c0392b;">🗑️ ลบหมวด</h3>
+    <div class="bd" id="delSheetBody"></div>
+    <div class="ft">
+      <button class="btn" data-close>ยกเลิก</button>
+      <button class="btn" id="delSheetBtn" style="border-color:#c0392b;color:#c0392b;"></button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mUpdate">
+  <div class="dlg">
+    <h3>📤 อัพเดทราคา</h3>
+    <div class="bd" id="updStep1">
+      <div style="font-weight:800;margin-bottom:11px;font-size:14px;">1️⃣ เลือกเวลาที่ราคามีผล</div>
+      <div class="upd-head" id="updHead"></div>
+      <label class="updopt" id="updOptNow">
+        <div class="updopt-top">
+          <span class="updopt-radio"></span>
+          <input type="radio" name="updWhen" value="now" checked style="display:none;" />
+          <span class="updopt-title">⚡ มีผลทันที</span>
+        </div>
+        <div class="updopt-desc">ราคาใหม่จะใช้กับลูกค้าทันทีที่กดยืนยัน</div>
+      </label>
+      <label class="updopt" id="updOptSched">
+        <div class="updopt-top">
+          <span class="updopt-radio"></span>
+          <input type="radio" name="updWhen" value="sched" style="display:none;" />
+          <span class="updopt-title">🗓️ ตั้งวัน–เวลา</span>
+        </div>
+        <div class="updopt-desc">ซ่อนราคาใหม่จากลูกค้าไว้ก่อน แล้วเปลี่ยนให้อัตโนมัติเมื่อถึงเวลาที่กำหนด</div>
+        <div class="updopt-body">
+          <input type="datetime-local" id="updTime" class="upd-dt" />
+          <div class="upd-chips" id="updChips">
+            <button type="button" class="upd-chip" data-preset="t17">วันนี้ 17:00</button>
+            <button type="button" class="upd-chip" data-preset="tm8">พรุ่งนี้ 08:00</button>
+            <button type="button" class="upd-chip" data-preset="d2">มะรืนนี้ 08:00</button>
+            <button type="button" class="upd-chip" data-preset="mon">จันทร์หน้า 08:00</button>
+            <button type="button" class="upd-chip" data-preset="m1">ต้นเดือนหน้า</button>
+          </div>
+          <div class="upd-echo" id="updEcho" style="display:none;"></div>
+        </div>
+      </label>
+    </div>
+    <div class="bd" id="updStep2" style="display:none;">
+      <div style="font-weight:700;margin-bottom:8px;">2️⃣ สรุปก่อนยืนยัน</div>
+      <div id="updSummary"></div>
+    </div>
+    <div class="ft">
+      <button class="btn" data-close>ยกเลิก</button>
+      <button class="btn" id="updBack" style="display:none;">← ย้อนกลับ</button>
+      <button class="btn primary" id="updNext">ถัดไป →</button>
+      <button class="btn primary" id="updConfirm" style="display:none;">✅ ยืนยันอัพเดท</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mKeys">
+  <div class="dlg" style="width:560px;">
+    <h3>⌨️ คีย์ลัดทั้งหมด (แบบ Windows / Excel)</h3>
+    <div class="bd" style="max-height:60vh;overflow:auto;">
+      <table class="keys-tb">
+        <tr><th colspan="2">แก้ไข</th></tr>
+        <tr><td>Ctrl+C / Ctrl+X / Ctrl+V</td><td>คัดลอก / ตัด / วาง (Esc = ยกเลิกที่คัดลอกไว้)</td></tr>
+        <tr><td>Ctrl+Z / Ctrl+Y</td><td>ย้อนกลับ / ทำซ้ำ</td></tr>
+        <tr><td>Ctrl+D / Ctrl+R</td><td>เติมลงจากแถวบน / เติมขวาจากคอลัมน์ซ้าย</td></tr>
+        <tr><td>F2 / Enter</td><td>แก้ไขเซลล์ · พิมพ์ทับได้ทันที · Delete = ล้างค่า</td></tr>
+        <tr><td>Ctrl+B / I / U</td><td>ตัวหนา / เอียง / ขีดเส้นใต้</td></tr>
+        <tr><th colspan="2">แถว/คอลัมน์</th></tr>
+        <tr><td>Shift+Space / Ctrl+Space</td><td>เลือกทั้งแถว / ทั้งคอลัมน์</td></tr>
+        <tr><td>Ctrl + (+) / Ctrl + (−)</td><td>แทรกแถว-คอลัมน์ (หรือแทรกที่คัดลอก) / ลบ</td></tr>
+        <tr><th colspan="2">เลื่อน/เลือก</th></tr>
+        <tr><td>ลูกศร · Shift+ลูกศร · Tab</td><td>เลื่อนช่อง · ขยายการเลือก · ไปขวา</td></tr>
+        <tr><td>Ctrl+ลูกศร / Ctrl+Home / Ctrl+End</td><td>ไปสุดขอบ / ไป A1 / ไปท้ายชีต</td></tr>
+        <tr><td>PageUp / PageDown</td><td>เลื่อนทีละ 20 แถว</td></tr>
+        <tr><td>Ctrl+A</td><td>เลือกทั้งหมด</td></tr>
+        <tr><th colspan="2">ไฟล์</th></tr>
+        <tr><td>Ctrl+S / Ctrl+P / Ctrl+F</td><td>บันทึก / พิมพ์ / ไปช่องค้นหา</td></tr>
+        <tr><th colspan="2">🎮 Logitech คีย์บอร์ด (ทุกรุ่นที่มีปุ่ม G / ปุ่มมาโคร)</th></tr>
+        <tr><td colspan="2" style="color:#555;">เปิด <b>Logitech G HUB</b> → โปรไฟล์ของเบราว์เซอร์ → ผูกปุ่ม G แต่ละปุ่มเป็นปุ่ม F13–F24 แล้วโปรแกรมจะรับคำสั่งอัตโนมัติ:</td></tr>
+        <tr><td>F13 / F14 / F15</td><td>คัดลอก / ตัด / วาง</td></tr>
+        <tr><td>F16 / F17 / F18</td><td>ย้อนกลับ / ทำซ้ำ / บันทึก</td></tr>
+        <tr><td>F19 / F20 / F21</td><td>เพิ่มรุ่น / เพิ่มขนาด / ผสานเซลล์</td></tr>
+        <tr><td>F22 / F23 / F24</td><td>พิมพ์ / อัพเดทราคา / เปิดหน้าต่างนี้</td></tr>
+        <tr><th colspan="2">🖱️ Logitech เม้าส์ (MX / G / M-series ทุกรุ่น)</th></tr>
+        <tr><td>ปุ่มโป้งหลัง (Back)</td><td>ย้อนกลับ (Undo) — ใช้ได้ทันที ไม่ต้องตั้งค่า</td></tr>
+        <tr><td>ปุ่มโป้งหน้า (Forward)</td><td>ทำซ้ำ (Redo)</td></tr>
+        <tr><td>Ctrl + ล้อเลื่อน</td><td>ซูมเข้า-ออกตาราง (50–200%)</td></tr>
+        <tr><td>ล้อเอียงซ้าย-ขวา (tilt)</td><td>เลื่อนตารางแนวนอน</td></tr>
+        <tr><td>คลิกล้อ (ปุ่มกลาง) บนตาราง</td><td>ซ่อน/แสดงเลขลับ 🙈</td></tr>
+        <tr><td colspan="2" style="color:#555;">ปุ่มพิเศษอื่นๆ (ปุ่มข้าง G502, MX thumb, gesture): เปิด <b>G HUB / Options+</b> → ผูกปุ่มเป็น Keystroke ใดก็ได้ของโปรแกรม (เช่น Ctrl+C, Ctrl+S, F13–F24) ระบบรับทันทีทุกรุ่น</td></tr>
+      </table>
+    </div>
+    <div class="ft"><button class="btn primary" data-close>ปิด</button></div>
+  </div>
+</div>
+
+<div class="modal" id="mApi">
+  <div class="dlg" style="width:560px;">
+    <h3>🔌 ปลั๊กอินบอท Telegram / AI LOCAL <span class="api-dot off" id="apiDot"></span></h3>
+    <div class="bd" style="max-height:62vh;overflow:auto;">
+      <label class="cb-cfg-row" style="font-size:13px;"><input type="checkbox" id="apiEnabled" /> เปิดใช้สะพาน API</label>
+      <input id="apiUrl" placeholder="ws://localhost:8765" style="width:100%;height:32px;border:1px solid #c4c4c4;border-radius:6px;padding:0 9px;font-family:Consolas,monospace;margin-top:8px;" />
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <div style="flex:1;"><div class="api-lab">🔑 READ token (เช็คราคา)</div><input id="apiReadTok" style="width:100%;height:30px;border:1px solid #c4c4c4;border-radius:6px;padding:0 8px;font-family:Consolas,monospace;font-size:11.5px;" /></div>
+        <div style="flex:1;"><div class="api-lab">🔐 ADMIN token (แก้ไข/สั่งงาน)</div><input id="apiAdminTok" style="width:100%;height:30px;border:1px solid #c4c4c4;border-radius:6px;padding:0 8px;font-family:Consolas,monospace;font-size:11.5px;" /></div>
+      </div>
+      <div class="cb-cfg-note" style="margin-top:8px;">แยกโทเคน 2 ชุด: READ เห็นเฉพาะราคาที่มีผลแล้ว (ไม่เห็นทุน/รหัสลับ) · ADMIN แก้ราคา-เผยแพร่ได้เหมือนนั่งหน้าจอ · ไฟล์เซิร์ฟเวอร์ตัวอย่าง: <b>telegram-bridge-server.example.js</b> (รันด้วย Node.js บนเครื่องคุณ)</div>
+      <table class="keys-tb" style="margin-top:8px;">
+        <tr><th colspan="2">คำสั่ง API (JSON ผ่าน WebSocket)</th></tr>
+        <tr><td>price.check {q}</td><td>🔑 เช็คราคา (สูงสุด 10 รายการ)</td></tr>
+        <tr><td>price.list {q}</td><td>🔑 รายการราคา (สูงสุด 60)</td></tr>
+        <tr><td>admin.price.check {q}</td><td>🔐 เช็คราคา + ทุน/Margin/ร่างล่าสุด</td></tr>
+        <tr><td>admin.price.set {q, field, value}</td><td>🔐 แก้ราคา (field: retail/B/A/S/cost)</td></tr>
+        <tr><td>admin.cell.set {ref, value}</td><td>🔐 แก้ช่องใดก็ได้ เช่น H9 = 1850 หรือสูตร</td></tr>
+        <tr><td>admin.update.publish {effectiveAt?}</td><td>🔐 เผยแพร่ราคาเข้า DB (ตั้งเวลาได้)</td></tr>
+        <tr><td>admin.changes</td><td>🔐 แถวที่มีการปรับรอบนี้</td></tr>
+      </table>
+      <div class="api-lab" style="margin-top:8px;">บันทึกการทำงาน</div>
+      <pre id="apiLog" style="background:#1f1f1f;color:#9fdfb5;border-radius:6px;padding:8px;font-size:10.5px;max-height:110px;overflow:auto;margin:4px 0 0;">—</pre>
+    </div>
+    <div class="ft">
+      <button class="btn" data-close>ปิด</button>
+      <button class="btn primary" id="apiSave">💾 บันทึก + เชื่อมต่อ</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app-xls/data-pickup01.js"></script>
+<script src="app-xls2/engine2.js"></script>
+<script src="app-xls2/sheet-build.js"></script>
+<script src="app-xls2/sheet-grid.js"></script>
+<script src="app-xls2/border-overlay.js"></script>
+<script src="app-xls2/image-slot.js"></script>
+<script src="app-xls2/chatbot2.js"></script>
+<script src="app-xls2/api-bridge.js"></script>
+<script src="app-xls2/img-layer.js"></script>
+<script src="app-xls2/ai-image.js"></script>
+<script src="app-xls2/photopea-edit.js"></script>
+<script src="app-xls2/gdrive-sync.js?v=2"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---- หมวด (sheets): สร้าง registry ครั้งแรก + ย้ายข้อมูลเดิมเข้าหมวดแรก ----
+  (function migrateSheets() {
+    var sheets = XL2.store.sheetsList();
+    if (!sheets.length) {
+      var id = 's' + Date.now();
+      sheets = [{ id: id, name: 'ยางปิคอัพ-01' }];
+      XL2.store.saveSheets(sheets);
+      XL2.store.setCurSheet(id);
+      var legacy = localStorage.getItem('xls2_current');
+      if (legacy) localStorage.setItem('xls2_sheet_' + id, legacy);
+    }
+    var cur = XL2.store.curSheet();
+    if (!cur || !sheets.some(function (s) { return s.id === cur; })) XL2.store.setCurSheet(sheets[0].id);
+  })();
+
+  SG.init({ root: $('grid'), fx: $('fx'), name: $('nameBox'), status: $('status'), sum: $('sumbox'), ctx: $('ctx') });
+  $('grid').addEventListener('mousedown', function () { setUndoSnap = null; }, true);   // แตะตาราง = เลิกสถานะย้อนการตั้งค่าสี
+  // รวบแถบค้นหา + แถบสูตร fx เข้าแถว 2 (ช่องสูตรอยู่กลาง · ค้นหาอยู่ขวา)
+  document.querySelector('.fxbar').appendChild($('fltbar'));
+  document.querySelector('.fxbar').appendChild(document.querySelector('.grp-fx'));
+
+  // toolbar
+  $('btnUndo').onclick = function () { if (setUndoSnap) { restoreSettings(setUndoSnap); setUndoSnap = null; if (typeof toast === 'function') toast('↩ ย้อนการตั้งค่าสี'); return; } SG.undo(); };
+  $('btnRedo').onclick = function () { SG.redo(); };
+  $('btnAddSize').onclick = function () { SG.addSizeGroup(); };
+  $('btnDelSize').onclick = function () { SG.delSizeGroup(); };
+  $('btnAddModel').onclick = function () { SG.addModelRow(); };
+  $('btnDelRow').onclick = function () { SG.deleteRow(); };
+  $('btnMerge').onclick = function () { SG.toggleMerge(); };
+  $('btnBold').onclick = function () { SG.applyStyle('b', 'toggle'); };
+  $('btnItalic').onclick = function () { SG.applyStyle('i', 'toggle'); };
+  $('btnUnder').onclick = function () { SG.applyStyle('u', 'toggle'); };
+  $('fontFam').onchange = function () { SG.applyStyle('ff', this.value === 'Arial' ? null : (this.value || null)); };
+  // ปุ่มจัดข้อความรวม: คลิกสลับ ซ้าย→กึ่งกลาง→ขวา · ไอคอนเปลี่ยนตาม
+  var alCycle = ['left', 'center', 'right'], alClsMap = { left: 'l', center: 'c', right: 'r' };
+  $('btnAlign').onclick = function () {
+    var cur = (SG.getDoc().cells[SG.sel.r + ':' + SG.sel.c] || {}).s || {};
+    var idx = alCycle.indexOf(cur.al || 'left');
+    var next = alCycle[(idx + 1) % 3];
+    SG.applyStyle('al', next);
+    var ic = this.querySelector('.al-ic');
+    ic.className = 'al-ic ' + alClsMap[next];
+  };
+  // ปรับไอคอนตามช่องที่เลือก
+  function syncAlignIcon() {
+    var cur = (SG.getDoc().cells[SG.sel.r + ':' + SG.sel.c] || {}).s || {};
+    var ic = $('btnAlign') && $('btnAlign').querySelector('.al-ic');
+    if (ic) ic.className = 'al-ic ' + (alClsMap[cur.al || 'left']);
+  }
+  var vaCycle = ['top', 'middle', 'bottom'], vaClsMap = { top: 't', middle: 'm', bottom: 'b' };
+  $('btnValign').onclick = function () {
+    var cur = (SG.getDoc().cells[SG.sel.r + ':' + SG.sel.c] || {}).s || {};
+    var idx = vaCycle.indexOf(cur.va || 'top');
+    var next = vaCycle[(idx + 1) % 3];
+    SG.applyStyle('va', next);
+    this.querySelector('.va-ic').className = 'va-ic ' + vaClsMap[next];
+  };
+  $('btnFsUp').onclick = function () { SG.stepFont(1); };
+  $('btnFsDn').onclick = function () { SG.stepFont(-1); };
+  $('fsBox').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); SG.setFontSize(this.value); this.blur(); } });
+  $('fsBox').addEventListener('change', function () { SG.setFontSize(this.value); });
+  $('btnTypeNum').onclick = function () { SG.setType('num'); };
+  $('btnDpUp').onclick = function () { SG.stepDp(1); };
+  $('btnDpDn').onclick = function () { SG.stepDp(-1); };
+  $('btnTypeText').onclick = function () { SG.setType('text'); };
+  $('btnDB').onclick = function () { SG.linkRowDB(); };
+  // ---- อัพเดทราคา: เลือกเวลา → สรุป → ยืนยัน ----
+  var PRICE_LBL = { 7: 'ราคาตั้ง', 13: 'SUB-B', 16: 'SUB-A', 19: 'SUB-S' };
+  var PRICE_KEY = { 7: 'retail', 13: 'B', 16: 'A', 19: 'S' };
+  function updItems() {
+    var d = SG.getDoc(), byR = {};
+    SG.dataRows().forEach(function (rw) { byR[rw.r] = rw; });
+    var items = [];
+    Object.keys(d.changes || {}).forEach(function (r) {
+      var rc = d.changes[r], rw = byR[r];
+      if (!rw) return;
+      Object.keys(rc).forEach(function (c) {
+        var e = rc[c];
+        var cur = parseFloat(String(rw[PRICE_KEY[c]] != null ? rw[PRICE_KEY[c]] : '').replace(/,/g, ''));
+        var old = parseFloat(String(e.old != null ? e.old : 0).replace(/,/g, '')) || 0;
+        if (!isFinite(cur) || cur === old) return;
+        items.push({ name: rw.size + ' · ' + rw.brand + ' ' + rw.model, col: PRICE_LBL[c], old: old, nw: cur });
+      });
+    });
+    return items;
+  }
+  function updStep(n) {
+    $('updStep1').style.display = n === 1 ? '' : 'none';
+    $('updStep2').style.display = n === 2 ? '' : 'none';
+    $('updNext').style.display = n === 1 ? '' : 'none';
+    $('updBack').style.display = n === 2 ? '' : 'none';
+    $('updConfirm').style.display = n === 2 ? '' : 'none';
+  }
+  function updWhen() {
+    var sched = document.querySelector('input[name="updWhen"]:checked').value === 'sched';
+    return sched ? ($('updTime').value || '') : '';
+  }
+  // ── ส่วนเสริม: การ์ดเลือกได้ · ปุ่มลัด · ตัวอย่างวันเวลาไทย · กันพลาด ──
+  function updPad(n) { return (n < 10 ? '0' : '') + n; }
+  function updLocalVal(d) { return d.getFullYear() + '-' + updPad(d.getMonth() + 1) + '-' + updPad(d.getDate()) + 'T' + updPad(d.getHours()) + ':' + updPad(d.getMinutes()); }
+  var UPD_DAY = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  var UPD_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  function updThaiDate(d) {
+    return 'วัน' + UPD_DAY[d.getDay()] + 'ที่ ' + d.getDate() + ' ' + UPD_MON[d.getMonth()] + ' ' + (d.getFullYear() + 543) + ' · ' + updPad(d.getHours()) + ':' + updPad(d.getMinutes()) + ' น.';
+  }
+  function updRel(ms) {
+    if (ms <= 0) return 'ผ่านมาแล้ว';
+    var m = Math.round(ms / 60000), h = Math.floor(m / 60), dd = Math.floor(h / 24);
+    if (dd >= 1) return 'อีก ~' + dd + ' วัน' + (h % 24 ? ' ' + (h % 24) + ' ชม.' : '');
+    if (h >= 1) return 'อีก ~' + h + ' ชม.' + (m % 60 ? ' ' + (m % 60) + ' นาที' : '');
+    return 'อีก ~' + Math.max(1, m) + ' นาที';
+  }
+  function updHeadRender() {
+    var items = updItems(), linked = Object.keys(SG.getDoc().rowLinks || {}).length;
+    $('updHead').innerHTML =
+      '<span class="upd-stat' + (items.length ? '' : ' zero') + '">✏️ ปรับราคา ' + items.length + ' จุด</span>' +
+      '<span class="upd-stat db">🗄️ ลิงก์ DB ' + linked + ' สินค้า</span>';
+  }
+  function updEchoRender() {
+    var echo = $('updEcho');
+    var sched = document.querySelector('input[name="updWhen"]:checked').value === 'sched';
+    if (!sched) { echo.style.display = 'none'; return; }
+    var v = $('updTime').value;
+    if (!v) { echo.style.display = 'block'; echo.className = 'upd-echo warn'; echo.innerHTML = '⚠️ ยังไม่ได้เลือกวัน–เวลา — กดปุ่มลัด หรือแตะที่ช่องด้านบน'; return; }
+    var d = new Date(v), ms = d.getTime() - Date.now();
+    echo.style.display = 'block';
+    if (ms <= 0) { echo.className = 'upd-echo warn'; echo.innerHTML = '🗓️ ' + updThaiDate(d) + '<br>⚠️ เป็นเวลาที่ผ่านมาแล้ว — จะมีผลทันทีที่ยืนยัน'; }
+    else { echo.className = 'upd-echo'; echo.innerHTML = '🗓️ ' + updThaiDate(d) + ' &nbsp;<b>(' + updRel(ms) + ')</b>'; }
+  }
+  function updSyncOpt() {
+    var sched = document.querySelector('input[name="updWhen"]:checked').value === 'sched';
+    $('updOptNow').classList.toggle('on', !sched);
+    $('updOptSched').classList.toggle('on', sched);
+    updEchoRender();
+  }
+  function updSelSched() { var s = document.querySelector('input[name="updWhen"][value="sched"]'); if (!s.checked) { s.checked = true; updSyncOpt(); } }
+  function updChipClear() { document.querySelectorAll('#updChips .upd-chip').forEach(function (c) { c.classList.remove('on'); }); }
+  document.querySelectorAll('input[name="updWhen"]').forEach(function (r) { r.addEventListener('change', function () { updChipClear(); updSyncOpt(); }); });
+  $('updTime').addEventListener('focus', updSelSched);
+  $('updTime').addEventListener('input', function () { updSelSched(); updChipClear(); updEchoRender(); });
+  $('updChips').addEventListener('click', function (e) {
+    var b = e.target.closest('.upd-chip'); if (!b) return;
+    updSelSched(); updChipClear(); b.classList.add('on');
+    var now = new Date(), d = new Date(now);
+    switch (b.dataset.preset) {
+      case 't17': d.setHours(17, 0, 0, 0); if (d <= now) d.setDate(d.getDate() + 1); break;
+      case 'tm8': d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); break;
+      case 'd2': d.setDate(d.getDate() + 2); d.setHours(8, 0, 0, 0); break;
+      case 'mon': { var add = ((1 - d.getDay()) + 7) % 7; if (add === 0) add = 7; d.setDate(d.getDate() + add); d.setHours(8, 0, 0, 0); } break;
+      case 'm1': d.setMonth(d.getMonth() + 1, 1); d.setHours(8, 0, 0, 0); break;
+    }
+    $('updTime').value = updLocalVal(d);
+    updEchoRender();
+  });
+  $('btnSync').onclick = function () {
+    var cur = SG.getSchedule();
+    document.querySelector('input[name="updWhen"][value="' + (cur ? 'sched' : 'now') + '"]').checked = true;
+    $('updTime').value = cur || '';
+    $('updTime').min = updLocalVal(new Date());
+    updChipClear();
+    updHeadRender();
+    updSyncOpt();
+    updStep(1);
+    $('mUpdate').classList.add('open');
+  };
+  $('updNext').onclick = function () {
+    var schedSel = document.querySelector('input[name="updWhen"]:checked').value === 'sched';
+    if (schedSel && !$('updTime').value) { updEchoRender(); return; }   // กันพลาด: เลือกตั้งเวลาแต่ยังไม่ใส่
+    var items = updItems();
+    var linked = Object.keys(SG.getDoc().rowLinks || {}).length;
+    var when = updWhen();
+    var html = '<div class="upd-line">⏱ มีผล: <b>' + (when ? when.replace('T', ' ') : 'ทันที') + '</b></div>';
+    if (items.length) {
+      html += '<div class="upd-line">✏️ ปรับราคา <b>' + items.length + ' จุด</b>:</div><div class="upd-list">' +
+        items.slice(0, 10).map(function (it) {
+          var up = it.nw > it.old;
+          return '<div class="upd-it"><span>' + it.name + ' · ' + it.col + '</span><b style="color:' + (up ? '#0a8f3c' : '#d62828') + ';">' + it.old.toLocaleString() + ' → ' + it.nw.toLocaleString() + ' ' + (up ? '▲' : '▼') + '</b></div>';
+        }).join('') + (items.length > 10 ? '<div class="upd-it">…อีก ' + (items.length - 10) + ' จุด</div>' : '') + '</div>';
+    } else {
+      html += '<div class="upd-line" style="color:#a05c1a;">⚠️ รอบนี้ไม่มีการปรับราคา</div>';
+    }
+    html += '<div class="upd-line">🗄️ ส่งราคาเข้า DB: <b>' + linked + ' สินค้าที่ลิงก์</b></div>';
+    $('updSummary').innerHTML = html;
+    $('updConfirm').disabled = (!items.length && !linked);
+    updStep(2);
+  };
+  $('updBack').onclick = function () { updStep(1); };
+  $('updConfirm').onclick = function () {
+    SG.setSchedule(updWhen());
+    SG.syncToDB();
+    // 📦 เก็บสำเนาหลังอัพเดททุกครั้ง แยกไว้ในหมวดประวัติ เผื่อย้อนกลับมาดู
+    try {
+      var aid = 'a' + Date.now();
+      var stamp = new Date().toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var curName = (XL2.store.sheetsList().find(function (s) { return s.id === XL2.store.curSheet(); }) || {}).name || 'ชีต';
+      XL2.store.saveSheetDoc(aid, SG.getDoc());
+      var sheets = XL2.store.sheetsList();
+      sheets.push({ id: aid, name: '📦 ' + curName + ' · อัพเดท ' + stamp, archived: 1 });
+      XL2.store.saveSheets(sheets);
+      renderSheets();
+    } catch (e) {}
+    $('mUpdate').classList.remove('open');
+    refresh();
+  };
+  $('btnLockRow').onclick = function () { SG.toggleLockRows(); };
+  $('btnLockCol').onclick = function () { SG.toggleLockCols(); };
+  $('btnPrint').onclick = function () { window.print(); };
+  $('btnKeys').onclick = function () { $('mKeys').classList.add('open'); };
+  $('btnImgAdd').onclick = function () { ImgLayer.pickFile(); };
+  $('btnImgSearch').onclick = function () { ImgLayer.googleSearch(); };
+  // 🔌 Telegram API
+  $('btnApi').onclick = function () {
+    var c = APIBridge.loadCfg();
+    $('apiEnabled').checked = !!c.enabled;
+    $('apiUrl').value = c.url || '';
+    $('apiReadTok').value = c.readToken || '';
+    $('apiAdminTok').value = c.adminToken || '';
+    $('apiLog').textContent = APIBridge.getLogs().slice(-12).join('\n') || '—';
+    $('apiDot').className = 'api-dot ' + APIBridge.getStatus();
+    $('mApi').classList.add('open');
+  };
+  $('apiSave').onclick = function () {
+    APIBridge.saveCfg({ enabled: $('apiEnabled').checked, url: $('apiUrl').value.trim(), readToken: $('apiReadTok').value.trim(), adminToken: $('apiAdminTok').value.trim() });
+    if ($('apiEnabled').checked) APIBridge.connect(); else APIBridge.disconnect();
+    $('apiDot').className = 'api-dot ' + APIBridge.getStatus();
+  };
+  // 🌙/☀️ โหมดมืด-สว่าง (จำค่าไว้)
+  function applyTheme(dark) {
+    document.body.classList.toggle('dark', dark);
+    $('themeIc').textContent = dark ? '☀️' : '🌙';
+    $('btnTheme').querySelector('.tx').textContent = dark ? 'โหมดสว่าง' : 'โหมดมืด';
+    try { localStorage.setItem('xls2_theme', dark ? 'dark' : 'light'); } catch (e) {}
+    if (window.SG) SG.render();   // รีเรนเดอร์ให้สีคอนทราสต์ชั่วคราวทำงาน
+  }
+  $('btnTheme').onclick = function () { applyTheme(!document.body.classList.contains('dark')); };
+  applyTheme(localStorage.getItem('xls2_theme') === 'dark');
+  // พิมพ์ = สลับเป็นโหมดสว่างชั่วคราวเสมอ (กระดาษขาวอ่านชัด)
+  var wasDark = false;
+  window.addEventListener('beforeprint', function () {
+    wasDark = document.body.classList.contains('dark');
+    if (wasDark) { document.body.classList.remove('dark'); SG.render(); }
+  });
+  window.addEventListener('afterprint', function () {
+    if (wasDark) { document.body.classList.add('dark'); SG.render(); }
+  });
+  // Ctrl+S / Ctrl+P ทั่วทั้งหน้า (กัน browser dialog)
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = e.key.toLowerCase();
+    if (k.length === 1 && !/[a-z]/.test(k) && /^Key[A-Z]$/.test(e.code || '')) k = e.code.slice(3).toLowerCase();   // รองรับแป้นไทย
+    if (k === 's') { e.preventDefault(); SG.save(); stampSaved(); }
+    if (k === 'p') { e.preventDefault(); window.print(); }
+  });
+  $('btnSecret').onclick = function () { var on = SG.toggleSecret(); this.classList.toggle('on', on); };
+
+  // ---- filter / search bar ----
+  function renderFltBar() {
+    var host = $('fltbar'), isAdmin = SG.getMode() === 'admin';
+    var op = SG.filterOptions();
+    function opts(arr, label) { return '<option value="">' + label + '</option>' + arr.map(function (v) { return '<option>' + v.replace(/</g, '&lt;') + '</option>'; }).join(''); }
+    if (isAdmin) {
+      host.innerHTML = '<span class="flt-ic">🔍</span>' +
+        '<input id="fq" class="flt-q" placeholder="ค้นหาทันที… ขนาด / ยี่ห้อ / รุ่น / ราคา / หมายเหตุ (พิมพ์แล้วกรองเลย)" />' +
+        '<button class="btn" id="fclr" title="ล้างคำค้นหา กลับมาแสดงทั้งหมด" style="display:none;">✕ ล้างค้นหา</button><span class="flt-count" id="fcount"></span>';
+      var t;
+      $('fq').addEventListener('input', function () {
+        $('fclr').style.display = $('fq').value.trim() ? '' : 'none';
+        clearTimeout(t); var v = this.value;
+        t = setTimeout(function () {
+          var n = SG.setFilter({ q: v, applied: true });
+          $('fcount').textContent = v.trim() ? ('พบ ' + n + ' รายการ') : '';
+        }, 180);
+      });
+      $('fclr').onclick = function () { SG.clearFilter(); renderFltBar(); };
+    } else {
+      host.innerHTML = '<span class="flt-ic">🔍</span>' +
+        '<select id="fcat" class="flt-sel"><option>ยางปิคอัพ</option></select>' +
+        '<select id="frim" class="flt-sel">' + opts(op.rims.map(function (v) { return v + '″'; }), 'ขอบ · ทั้งหมด') + '</select>' +
+        '<select id="fwidth" class="flt-sel">' + opts(op.widths, 'หน้ากว้าง · ทั้งหมด') + '</select>' +
+        '<select id="fseries" class="flt-sel">' +
+          '<option value="">ซีรี่ส์ · ทั้งหมด</option>' +
+          op.seriesList.map(function (v) { return '<option value="' + v + '">ซีรี่ส์ ' + v + '</option>'; }).join('') +
+          (op.hasFullSeries ? '<option value="full">ไม่ระบุซีรี่ส์ (เต็ม)</option>' : '') +
+        '</select>' +
+        '<select id="fheight" class="flt-sel">' +
+          '<option value="">ความสูง · ทั้งหมด</option>' +
+          (op.heights || []).map(function (cm) {
+            var inch = (parseFloat(cm) / 2.54).toFixed(1);
+            return '<option value="' + cm + '">' + inch + '″ · ' + cm + ' cm</option>';
+          }).join('') +
+        '</select>' +
+        '<select id="fbrand" class="flt-sel">' + opts(op.brands, 'ยี่ห้อ · ทั้งหมด') + '</select>' +
+        '<input id="fq" class="flt-q" placeholder="คำค้นเพิ่มเติมฯ" style="max-width:130px;" />' +
+        '<button class="btn primary" id="fgo">🔍 ค้นหา</button>' +
+        '<button class="btn" id="fclr" title="ล้างเงื่อนไขค้นหา" style="display:none;">✕ ล้างค้นหา</button><span class="flt-count" id="fcount"></span>';
+      function go() {
+        var n = SG.setFilter({
+          q: $('fq').value, brand: $('fbrand').value,
+          rim: $('frim').value.replace('″', ''), width: $('fwidth').value,
+          series: $('fseries').value, height: $('fheight').value, hUnit: 'cm',
+          applied: true
+        });
+        if (SG.isTooMany()) {
+          $('fcount').innerHTML = '<span style="color:#c0392b;">⚠️ พบ ' + n + ' รายการ — ระบุเงื่อนไขเพิ่ม</span>';
+        } else {
+          $('fcount').textContent = 'พบ ' + n + ' รายการ';
+        }
+      }
+      function go2done() { $('fclr').style.display = ''; }
+      $('fgo').onclick = function () { go(); go2done(); };
+      $('fq').addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+      $('fclr').onclick = function () { SG.clearFilter(); renderFltBar(); };
+    }
+  }
+
+  // ⋯ เครื่องมือเพิ่มเติม — badge นับจำนวน + จัดกลุ่มตามหมวดหมู่
+  var MORE_CATS = [
+    ['ไฟล์', ['btnQuickSave', 'btnSaveAs', 'btnVersions', 'btnSync', 'btnPrint']],
+    ['เลิกทำ/ทำซ้ำ', ['btnUndo', 'btnRedo']],
+    ['แถว / คอลัมน์', ['btnAddSize', 'btnDelSize', 'btnAddModel', 'btnDelRow']],
+    ['จัดรูปแบบ', ['btnBold', 'btnItalic', 'btnUnder', 'btnAlign', 'btnValign', 'btnFsUp', 'btnFsDn', 'btnFill', 'btnFont', 'btnBorder', 'btnMerge']],
+    ['ตัวเลข / ข้อมูล', ['btnTypeNum', 'btnTypeText', 'btnDpUp', 'btnDpDn', 'btnDB']],
+    ['ซ่อน / ล็อก', ['btnLockRow', 'btnLockCol', 'btnSecret']],
+    ['มุมมอง', ['btnMode', 'btnTheme', 'btnKeys']],
+    ['รูปภาพ', ['btnImgAdd', 'btnImgSearch']],
+    ['เชื่อมต่อ', ['btnApi']]
+  ];
+  function moreCatOf(id) { for (var i = 0; i < MORE_CATS.length; i++) { if (MORE_CATS[i][1].indexOf(id) >= 0) return MORE_CATS[i][0]; } return 'อื่นๆ'; }
+  function updateMoreBadge() {
+    var n = $('morePop').querySelectorAll('.btn').length;
+    var bd = $('moreBadge'); if (!bd) return;
+    bd.textContent = n; bd.style.display = n ? 'flex' : 'none';
+  }
+  function groupMorePop() {
+    var pop = $('morePop');
+    var btns = [].slice.call(pop.querySelectorAll('.btn'));
+    [].slice.call(pop.querySelectorAll('.lbl, .morecat')).forEach(function (h) { h.remove(); });
+    var groups = {};
+    btns.forEach(function (b) { var c = moreCatOf(b.id); (groups[c] = groups[c] || []).push(b); });
+    var order = MORE_CATS.map(function (p) { return p[0]; }); order.push('อื่นๆ');
+    order.forEach(function (name) {
+      if (!groups[name]) return;
+      var h = document.createElement('div'); h.className = 'morecat'; h.textContent = name;
+      pop.appendChild(h);
+      groups[name].forEach(function (b) { pop.appendChild(b); });
+    });
+    updateMoreBadge();
+  }
+  $('btnMore').onclick = function (e) {
+    e.stopPropagation();
+    $('swPop').classList.remove('open'); $('fontPop').classList.remove('open'); $('bdPop').classList.remove('open');
+    if (!$('morePop').classList.contains('open')) groupMorePop();
+    $('morePop').classList.toggle('open');
+    placePop($('morePop'), this);
+  };
+  new MutationObserver(updateMoreBadge).observe($('morePop'), { childList: true });
+  updateMoreBadge();
+  $('morePop').addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target.closest('button.btn')) setTimeout(function () { $('morePop').classList.remove('open'); }, 120);
+  });
+
+  function applyMode(m) {
+    SG.clearFilter();   // ล้างตัวกรองเมื่อสลับโหมด กันตัวกรองค้างโดยมองไม่เห็น
+    SG.setMode(m);
+    var a = m === 'admin';
+    $('btnMode').classList.toggle('on', true);
+    var mb = $('btnMode');
+    if (mb) { mb.querySelector('.ic').textContent = a ? '🛠️' : '👁️'; mb.querySelector('.tx').textContent = a ? 'แอดมิน' : 'ผู้ใช้'; mb.classList.toggle('usermode', !a); }
+    ['btnAddSize','btnDelSize','btnAddModel','btnDelRow','btnMerge','btnBorder','btnBold','btnItalic','btnUnder','btnAlign','btnValign','btnFsUp','btnFsDn','fsBox','btnTypeNum','btnDpUp','btnDpDn','btnTypeText','btnDB','btnSync','btnLockRow','btnLockCol','btnFill','btnFont','btnUndo','btnRedo','fontFam','btnKeys'].forEach(function (id) { $(id).disabled = !a; });
+    ['shAdd','shRen','shDel'].forEach(function (id) { $(id).style.display = a ? '' : 'none'; });   // ผู้ใช้สลับหมวดได้ แต่จัดการไม่ได้
+    renderFltBar();
+  }
+  // 🔒 ไฟล์ประวัติ (📦 หลังอัพเดท) = อ่านอย่างเดียวถาวร — ดูย้อนหลังได้ แก้ไม่ได้ กันประวัติเพี้ยน
+  function isArchivedCur() {
+    var cur = XL2.store.curSheet();
+    return XL2.store.sheetsList().some(function (s) { return s.id === cur && s.archived; });
+  }
+  var preArchiveMode = null;
+  function enforceArchiveLock() {
+    var locked = isArchivedCur(), mb = $('btnMode'), ab = document.getElementById('archBanner');
+    if (locked) {
+      if (SG.getMode() === 'admin') { preArchiveMode = 'admin'; applyMode('user'); }   // บังคับโหมดดูอย่างเดียว
+      if (mb) { mb.disabled = true; mb.classList.add('locked-arch'); mb.title = '🔒 ไฟล์ประวัติ — ดูได้อย่างเดียว แก้ไขไม่ได้'; }
+      if (ab) ab.style.display = 'flex';
+    } else {
+      if (mb) { mb.disabled = false; mb.classList.remove('locked-arch'); mb.title = 'สลับโหมด แอดมิน ⇄ ผู้ใช้ (คลิกเพื่อสลับ)'; }
+      if (ab) ab.style.display = 'none';
+      if (preArchiveMode === 'admin' && SG.getMode() === 'user') applyMode('admin');   // กลับหมวดปกติ → คืนโหมดแอดมินให้อัตโนมัติ
+      preArchiveMode = null;
+    }
+  }
+  $('btnMode').onclick = function () { if (isArchivedCur()) return; applyMode(SG.getMode() === 'admin' ? 'user' : 'admin'); };
+
+  // zoom
+  function setZ(z) { SG.setZoom(z); $('zVal').textContent = Math.round(SG.getZoom() * 100) + '%'; }
+  $('zIn').onclick = function () { setZ(SG.getZoom() + 0.1); };
+  $('zOut').onclick = function () { setZ(SG.getZoom() - 0.1); };
+
+  // 🖱️ Logitech / เม้าส์ทุกรุ่น: ปุ่มข้างนิ้วโป้ง (Back/Forward) = ย้อนกลับ/ทำซ้ำ · Ctrl+ล้อเลื่อน = ซูม · ล้อเอียง (tilt wheel) = เลื่อนซ้าย-ขวา
+  (function logiMouse() {
+    var gw = document.getElementById('gridwrap');
+    // ปุ่มโป้ง 4/5 (browser button 3=Back, 4=Forward) — กันย้อนหน้าเว็บ แล้วใช้เป็น undo/redo
+    document.addEventListener('mousedown', function (e) {
+      if (e.button === 3) { e.preventDefault(); SG.undo(); }
+      else if (e.button === 4) { e.preventDefault(); SG.redo(); }
+    });
+    document.addEventListener('mouseup', function (e) { if (e.button === 3 || e.button === 4) e.preventDefault(); });
+    window.addEventListener('auxclick', function (e) { if (e.button === 3 || e.button === 4) e.preventDefault(); });
+    // Ctrl + ล้อเลื่อน = ซูมเข้า-ออก (กันซูมทั้งหน้าเว็บ)
+    document.addEventListener('wheel', function (e) {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZ(SG.getZoom() + (e.deltaY < 0 ? 0.1 : -0.1));
+    }, { passive: false });
+    // ล้อเอียง/ปัดซ้ายขวา (tilt wheel ของ Logitech MX/G) — เลื่อนตารางแนวนอน (เบราว์เซอร์รองรับ deltaX อยู่แล้ว — ยืนยันว่าไม่ถูกบล็อก)
+    // ปุ่มกลาง (ล้อคลิก) บนตาราง = สลับโหมดซ่อนเลข (กัน autoscroll)
+    if (gw) gw.addEventListener('mousedown', function (e) {
+      if (e.button === 1) { e.preventDefault(); var on = SG.toggleSecret(); $('btnSecret').classList.toggle('on', on); }
+    });
+  })();
+
+  // swatches + 🎨 สีกำหนดเอง + จดจำสีล่าสุด (ใช้ร่วมกันทุกพาเลตต์)
+  function recentColors() { try { return JSON.parse(localStorage.getItem('xls2_recent_colors') || '[]'); } catch (e) { return []; } }
+  var custRows = [];
+  function renderRecentRows() {
+    var rc = recentColors();
+    custRows.forEach(function (row) {
+      var host = row.querySelector('.cust-recent');
+      host.innerHTML = rc.map(function (c) { return '<span class="sw rsw" data-c="' + c + '" style="background:#' + c + '" title="#' + c + '"></span>'; }).join('');
+      host.querySelectorAll('.rsw').forEach(function (sw) { sw.onclick = function () { row._applyFn(sw.dataset.c); }; });
+    });
+  }
+  function addRecentColor(hex) {
+    hex = String(hex).replace('#', '').toUpperCase();
+    var rc = recentColors().filter(function (c) { return c !== hex; });
+    rc.unshift(hex);
+    localStorage.setItem('xls2_recent_colors', JSON.stringify(rc.slice(0, 8)));
+    renderRecentRows();
+  }
+  function buildCustomRow(hostEl, applyFn) {
+    var row = document.createElement('div');
+    row.className = 'cust-row';
+    row.innerHTML = '<label class="cust-pick">➕ สีอื่น…<input type="color" value="#F47C20"></label><div class="cust-recent"></div>';
+    row.querySelector('input').addEventListener('change', function () {
+      var hex = this.value.replace('#', '').toUpperCase();
+      addRecentColor(hex);
+      applyFn(hex);
+    });
+    row._applyFn = function (hex) { addRecentColor(hex); applyFn(hex); };
+    hostEl.appendChild(row);
+    custRows.push(row);
+  }
+  XL2.PALETTE.forEach(function (p) {
+    var b = document.createElement('div');
+    b.className = 'sw' + (p.c ? '' : ' none');
+    if (p.c) b.style.background = '#' + p.c;
+    b.title = p.n;
+    b.onclick = function () { SG.applyStyle('bg', p.c); setLastFill(p.c); $('swPop').classList.remove('open'); };
+    $('swGrid').appendChild(b);
+  });
+  XL2.FONT_PALETTE.forEach(function (p) {
+    var b = document.createElement('div');
+    b.className = 'sw swfont' + (p.c ? '' : ' none');
+    if (p.c) { b.style.color = '#' + p.c; b.textContent = 'A'; if (p.c === 'FFFFFF') b.style.background = '#999'; }
+    b.title = p.n;
+    b.onclick = function () { SG.applyStyle('fc', p.c); setFontA(p.c); $('fontPop').classList.remove('open'); };
+    $('fontGrid').appendChild(b);
+  });
+  buildCustomRow($('swPop'), function (hex) { SG.applyStyle('bg', hex); setLastFill(hex); });
+  // ตัว A บนปุ่มสีตัวอักษร = สีล่าสุดที่เลือก (เหมือน Excel)
+  var lastFontColor = localStorage.getItem('xls2_last_fc') || 'C00000';
+  function setFontA(hex) { if (!hex) return; lastFontColor = hex; localStorage.setItem('xls2_last_fc', hex); var a = document.querySelector('#btnFont .ic'); if (a) a.style.color = '#' + hex; }
+  setFontA(lastFontColor);
+  buildCustomRow($('fontPop'), function (hex) { SG.applyStyle('fc', hex); setFontA(hex); });
+  buildCustomRow($('bdPop'), function (hex) {
+    SG.setBorderOpts({ color: hex });
+    document.querySelectorAll('#bdColors .bd-c').forEach(function (x) { x.classList.remove('on'); });
+    var d = $('bdDemo'); if (d) d.setAttribute('stroke', '#' + hex);
+  });
+  renderRecentRows();
+  // เทสีแบบ Excel: คลิกไอคอน = เทสีล่าสุด · คลิก ▾ = เลือกสี
+  var lastFill = localStorage.getItem('xls2_last_fill') || 'FFEB3B';
+  function setLastFill(hex) { if (!hex) return; lastFill = hex; localStorage.setItem('xls2_last_fill', hex); var b = document.querySelector('#btnFill .fill-drip'), p = document.querySelector('#btnFill .fill-pool'); if (b) b.setAttribute('fill', '#' + hex); if (p) p.setAttribute('fill', '#' + hex); }
+  setLastFill(lastFill);
+  $('btnFill').onclick = function (e) {
+    e.stopPropagation();
+    $('fontPop').classList.remove('open');
+    var openDrop = !e.target.closest('.ic');
+    if (openDrop) { $('swPop').classList.toggle('open'); placePop($('swPop'), this); }   // คลิก ▾ = เปิด dropdown
+    else { SG.applyStyle('bg', lastFill); }                  // คลิกถังสี = เทสีล่าสุดลงช่องที่เลือก
+  };
+  // วางจานสีใต้ปุ่มเสมอ แม้ปุ่มถูกลากย้าย (กันปัญหา "กดแล้วไม่พบจานสี")
+  function placePop(pop, btn) {
+    if (!pop.classList.contains('open')) return;
+    if (pop.parentElement !== document.body) document.body.appendChild(pop);   // กันปุ่มถูกลากออกแล้ว popup ติดอยู่ในกลุ่มที่ถูกซ่อน
+    var r = btn.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.maxHeight = (window.innerHeight - 16) + 'px'; pop.style.overflowY = 'auto';
+    var ph = pop.offsetHeight, pw = pop.offsetWidth;
+    var left = Math.max(6, Math.min(r.left, window.innerWidth - pw - 6));
+    var top = r.bottom + 3;
+    if (top + ph > window.innerHeight - 6) top = r.top - ph - 3;          // ไม่พอด้านล่าง → ขึ้นด้านบนปุ่ม
+    top = Math.max(6, Math.min(top, window.innerHeight - ph - 6));        // กันหลุดเฟรมบน/ล่าง
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+  $('btnFont').onclick = function (e) {
+    e.stopPropagation();
+    if (e.target.closest('.ic')) {   // คลิกตัว A = ใช้สีล่าสุดทันที
+      SG.applyStyle('fc', lastFontColor); $('fontPop').classList.remove('open'); return;
+    }
+    $('swPop').classList.remove('open'); $('bdPop').classList.remove('open'); $('fontPop').classList.toggle('open'); placePop($('fontPop'), this);
+  };
+  document.addEventListener('click', function () { var fp = $('filePop'); if (fp) fp.classList.remove('open'); $('swPop').classList.remove('open'); $('fontPop').classList.remove('open'); $('bdPop').classList.remove('open'); $('morePop').classList.remove('open'); });
+  $('swPop').onclick = function (e) { e.stopPropagation(); };
+  $('fontPop').onclick = function (e) { e.stopPropagation(); };
+  // ลากย้ายหน้าต่าง popup ของแถบเครื่องมือ (จับที่หัวข้อ .lbl)
+  document.addEventListener('mousedown', function (e) {
+    var lbl = e.target.closest('.swpop .lbl'); if (!lbl) return;
+    var pop = lbl.closest('.swpop'); if (!pop) return;
+    var r = pop.getBoundingClientRect();
+    pop.style.position = 'fixed'; pop.style.left = r.left + 'px'; pop.style.top = r.top + 'px'; pop.style.right = 'auto';
+    var sx = e.clientX, sy = e.clientY, ox = r.left, oy = r.top, moved = false;
+    function mv(ev) { moved = true; pop.style.left = Math.max(2, Math.min(ox + ev.clientX - sx, window.innerWidth - pop.offsetWidth - 2)) + 'px'; pop.style.top = Math.max(2, oy + ev.clientY - sy) + 'px'; }
+    function up() { document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); if (moved) { var blk = function (ev) { ev.stopPropagation(); document.removeEventListener('click', blk, true); }; document.addEventListener('click', blk, true); } }
+    document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true); e.preventDefault();
+  }, true);
+  // ⎋ Esc = ออก/ปิดทุกฟังก์ชัน (เมนู · ป๊อปอัป · หน้าต่าง · แชท) ยกเว้นปิดโปรแกรม
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var closed = false;
+    // แชทบอท
+    var cb = document.getElementById('cbPanel');
+    if (cb && cb.classList.contains('open')) { var x = cb.querySelector('.cb-x'); if (x) x.click(); else cb.classList.remove('open'); closed = true; }
+    // เมนู/ป๊อปอัปลอย
+    var sm = document.getElementById('settingsMenu'); if (sm) { sm.remove(); closed = true; }
+    var bp = document.getElementById('brandNamePop'); if (bp) { bp.remove(); closed = true; }
+    document.querySelectorAll('.swpop.open').forEach(function (p) { p.classList.remove('open'); closed = true; });
+    if (document.getElementById('btnMore')) document.getElementById('btnMore').classList.remove('drophot');
+    // หน้าต่าง modal (ปิดอันบนสุดทีละชั้น)
+    var openModals = [].slice.call(document.querySelectorAll('.modal.open'));
+    if (openModals.length) { openModals[openModals.length - 1].classList.remove('open'); closed = true; }
+    if (closed) { e.stopPropagation(); }   // ปิด UI ก่อน · ถ้าไม่มีอะไรเปิด ปล่อยให้ตาราง (ยกเลิกคัดลอก/เลือก) จัดการ
+  }, true);
+
+  // ไอคอนเส้นขอบแสดงรูปแบบ (ขอบไหน) + สี/ลายเส้นที่เลือก — เหมือน Excel
+  var lastBdMode = 'bottom';
+  function updBorderIcon(mode) {
+    var c = (document.querySelector('#bdColors .bd-c.on') || {}).dataset;
+    var s = (document.querySelector('#bdStyles .bd-s.on') || {}).dataset;
+    var color = c && c.bdc ? '#' + c.bdc : '#000';
+    var bp = document.getElementById('bdPop'); if (bp) bp.style.setProperty('--bd-prev', color);   // ไอคอนโหมดในป็อปอัปใช้สีเส้นที่เลือก
+    var style = s && s.bds ? s.bds : 'solid';
+    var dash = style === 'dotted' ? '1.2 1.4' : style === 'dashed' ? '2.4 1.6' : '';
+    if (mode) lastBdMode = mode; mode = lastBdMode || 'all';
+    var on = { t: 0, b: 0, l: 0, r: 0, ih: 0, iv: 0 };
+    if (mode === 'all') on = { t: 1, b: 1, l: 1, r: 1, ih: 1, iv: 1 };
+    else if (mode.indexOf('outer') === 0) { on.t = on.b = on.l = on.r = 1; }
+    else if (mode.indexOf('top') === 0) on.t = 1;
+    else if (mode.indexOf('bottom') === 0) on.b = 1;
+    else if (mode.indexOf('left') === 0) on.l = 1;
+    else if (mode.indexOf('right') === 0) on.r = 1;
+    var tw = (mode && /thick/.test(mode)) ? 2.6 : 1.8;
+    [['bdT', on.t], ['bdB', on.b], ['bdL', on.l], ['bdR', on.r], ['bdIH', on.ih], ['bdIV', on.iv]].forEach(function (pr) {
+      var el = document.getElementById(pr[0]); if (!el) return;
+      el.setAttribute('stroke', pr[1] ? color : 'transparent');
+      el.setAttribute('stroke-dasharray', pr[1] ? dash : '');
+      if (pr[0] !== 'bdIH' && pr[0] !== 'bdIV') el.setAttribute('stroke-width', pr[1] ? tw : '1.8');
+    });
+  }
+  updBorderIcon();
+  // 🌈 ไฮไลต์ค่าซ้ำ: ค่าเดียวกัน → สีเดียวกัน (สีสดใส) · ไม่แก้ข้อมูลจริง
+  var dupHi = false;
+  var DUP_PAL = ['#E5322E', '#1565C0', '#1E7F2C', '#E07A00', '#7B1FA2', '#00838F', '#C2185B', '#4527A0', '#33691E', '#AD1457', '#0277BD', '#D84315'];
+  function applyDupHi() {
+    var tds = document.querySelectorAll('#grid td.sg-c');
+    tds.forEach(function (t) { if (t.dataset.oc !== undefined) { t.style.color = t.dataset.oc; t.style.fontWeight = t.dataset.ow || ''; delete t.dataset.oc; delete t.dataset.ow; } });
+    if (!dupHi) return;
+    var map = {};
+    tds.forEach(function (t) { var v = t.textContent.trim(); if (!v) return; (map[v] = map[v] || []).push(t); });
+    var i = 0;
+    Object.keys(map).forEach(function (k) {
+      if (map[k].length < 2) return;
+      var c = DUP_PAL[i++ % DUP_PAL.length];
+      map[k].forEach(function (t) { t.dataset.oc = t.style.color || ''; t.dataset.ow = t.style.fontWeight || ''; t.style.color = c; t.style.fontWeight = '700'; });
+    });
+  }
+  var dupObs = new MutationObserver(function () { if (dupHi) applyDupHi(); });
+  var btnDup = document.getElementById('btnDupHi');
+  if (btnDup) btnDup.onclick = function () {
+    dupHi = !dupHi;
+    btnDup.classList.toggle('on', dupHi);
+    if (dupHi) { dupObs.observe(document.getElementById('grid'), { childList: true, subtree: true }); applyDupHi(); if (typeof toast === 'function') toast('🌈 ไฮไลต์ค่าซ้ำแล้ว — ค่าเดียวกันสีเดียวกัน'); }
+    else { dupObs.disconnect(); applyDupHi(); if (typeof toast === 'function') toast('ปิดไฮไลต์ค่าซ้ำ'); }
+  };
+  // borders dropdown
+  $('btnBorder').onclick = function (e) { e.stopPropagation(); $('swPop').classList.remove('open'); $('fontPop').classList.remove('open'); if (e.target.closest('.ic')) { SG.applyBorders(lastBdMode || 'all'); $('bdPop').classList.remove('open'); return; } $('bdPop').classList.toggle('open'); placePop($('bdPop'), this); };
+  $('bdCustom').addEventListener('input', function (e) { e.stopPropagation(); var hex = this.value.replace('#', ''); document.querySelectorAll('#bdColors .bd-c').forEach(function (x) { x.classList.remove('on'); }); SG.setBorderOpts({ color: hex }); updBorderIcon(); });
+  $('bdPop').onclick = function (e) {
+    e.stopPropagation();
+    if (e.target.id === 'bdCustom') return;
+    var cdot = e.target.closest('.bd-c');
+    if (cdot) {
+      document.querySelectorAll('#bdColors .bd-c').forEach(function (x) { x.classList.remove('on'); });
+      cdot.classList.add('on');
+      SG.setBorderOpts({ color: cdot.dataset.bdc });
+      updBorderIcon();
+      return;
+    }
+    var sty = e.target.closest('.bd-s');
+    if (sty) {
+      document.querySelectorAll('#bdStyles .bd-s').forEach(function (x) { x.classList.remove('on'); });
+      sty.classList.add('on');
+      SG.setBorderOpts({ style: sty.dataset.bds });
+      updBorderIcon();
+      return;
+    }
+    var wgt = e.target.closest('.bd-w');
+    if (wgt) {
+      document.querySelectorAll('#bdWeights .bd-w').forEach(function (x) { x.classList.remove('on'); });
+      wgt.classList.add('on');
+      SG.setBorderOpts({ w: parseFloat(wgt.dataset.bdw) });
+      updBorderIcon();
+      return;
+    }
+    var it = e.target.closest('.bd-it'); if (!it) return;
+    SG.applyBorders(it.dataset.bd);
+    updBorderIcon(it.dataset.bd);
+    $('bdPop').classList.remove('open');
+  };
+
+  // modals
+  document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { b.closest('.modal').classList.remove('open'); }; });
+  document.querySelectorAll('.modal').forEach(function (m) { m.onclick = function (e) { if (e.target === m) m.classList.remove('open'); }; });
+  $('btnFile').onclick = function (e) {
+    e.stopPropagation();
+    $('swPop').classList.remove('open'); $('fontPop').classList.remove('open'); $('bdPop').classList.remove('open'); $('morePop').classList.remove('open');
+    $('filePop').classList.toggle('open');
+    placePop($('filePop'), this);
+  };
+  $('filePop').onclick = function (e) { e.stopPropagation(); if (e.target.closest('button.btn')) $('filePop').classList.remove('open'); };
+  $('btnQuickSave').onclick = function () { SG.save(); stampSaved(); };  $('btnSaveAs').onclick = function () {
+    $('saveAsName').value = (SG.getDoc().name || 'ราคายาง') + ' ' + new Date().toLocaleDateString('th-TH');
+    $('mSaveAs').classList.add('open');
+    setTimeout(function () { $('saveAsName').focus(); $('saveAsName').select(); }, 50);
+  };
+  $('saveAsOk').onclick = function () {
+    var nm = $('saveAsName').value.trim();
+    SG.getDoc().name = nm || SG.getDoc().name;
+    SG.saveAs(nm); $('mSaveAs').classList.remove('open');
+    if (nm) { setFileName(nm); localStorage.setItem('xls2_savedAt', String(Date.now())); if (typeof toast === 'function') toast('✓ บันทึกเป็นไฟล์ใหม่ “' + nm + '” แล้ว — ทำงานต่อในไฟล์นี้'); }
+    refresh();
+  };
+  $('saveAsName').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('saveAsOk').click(); });
+  $('btnVersions').onclick = function () { renderVersions(); $('mVersions').classList.add('open'); };
+  // ---- สำรอง / กู้คืนข้อมูลลงเครื่อง (.json) — ฐานของ backup บน cloud ----
+  function bkStamp() {
+    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+  function bkGather() {
+    var data = {};
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('xls2') === 0) data[k] = localStorage.getItem(k);
+    }
+    return { _app: 'DPL-PriceList', _type: 'backup', _version: 1, exportedAt: new Date().toISOString(), data: data };
+  }
+  function bkDownload(obj, fname) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+  $('btnBackup').onclick = function () {
+    try { SG.save(); } catch (e) {}                       // เซฟล่าสุดก่อนสำรอง
+    var obj = bkGather();
+    var nSheets = 0; try { nSheets = (JSON.parse(obj.data.xls2_sheets || '[]') || []).length; } catch (e) {}
+    bkDownload(obj, 'ราคายาง-สำรอง-' + bkStamp() + '.json');
+    if (typeof toast === 'function') toast('💾 ดาวน์โหลดไฟล์สำรองแล้ว (' + nSheets + ' หมวด)');
+  };
+  $('btnRestore').onclick = function () { $('restoreFile').value = ''; $('restoreFile').click(); };
+  $('btnGDrive').onclick = function () { if (window.GDrive) GDrive.openPanel(); };
+  $('restoreFile').onchange = function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      var obj;
+      try { obj = JSON.parse(rd.result); } catch (err) { alert('❌ อ่านไฟล์ไม่ได้ — ไฟล์อาจเสียหายหรือไม่ใช่ .json'); return; }
+      if (!obj || obj._type !== 'backup' || !obj.data) { alert('❌ ไฟล์นี้ไม่ใช่ไฟล์สำรองของโปรแกรมราคายาง'); return; }
+      var nSheets = 0; try { nSheets = (JSON.parse(obj.data.xls2_sheets || '[]') || []).length; } catch (e2) {}
+      var when = obj.exportedAt ? new Date(obj.exportedAt).toLocaleString('th-TH') : '-';
+      if (!confirm('กู้คืนข้อมูลจากไฟล์สำรอง?\n\n• วันที่สำรอง: ' + when + '\n• จำนวนหมวด: ' + nSheets + ' หมวด\n\n⚠️ ข้อมูลปัจจุบันทั้งหมดจะถูกแทนที่\nระบบจะดาวน์โหลดไฟล์สำรองของข้อมูลปัจจุบันให้อัตโนมัติก่อน (กันพลาด)')) return;
+      try { bkDownload(bkGather(), 'ราคายาง-ก่อนกู้คืน-' + bkStamp() + '.json'); } catch (e3) {}   // สำรองสถานะปัจจุบันกันพลาด
+      var rm = []; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('xls2') === 0) rm.push(k); }
+      rm.forEach(function (k) { localStorage.removeItem(k); });
+      Object.keys(obj.data).forEach(function (k) { localStorage.setItem(k, obj.data[k]); });
+      alert('✅ กู้คืนข้อมูลเรียบร้อย — โปรแกรมจะโหลดใหม่');
+      location.reload();
+    };
+    rd.readAsText(f);
+  };
+  $('btnReset').onclick = function () { if (confirm('แทนที่ข้อมูลปัจจุบันด้วยต้นฉบับจาก Excel?')) { SG.resetFromSource(); $('mVersions').classList.remove('open'); refresh(); } };
+
+  function renderVersions() {
+    var vs = XL2.store.loadVersions(), host = $('vList');
+    if (!vs.length) { host.innerHTML = '<div class="empty">ยังไม่มีเวอร์ชันที่บันทึก</div>'; return; }
+    host.innerHTML = '';
+    vs.forEach(function (v) {
+      var row = document.createElement('div'); row.className = 'vrow';
+      row.innerHTML = '<div><div class="vn">' + XL2.esc(v.name) + '</div><div class="vt">' + new Date(v.savedAt).toLocaleString('th-TH') + '</div></div>' +
+        '<div class="sp"><button class="mini" data-open>เปิด</button><button class="mini del" data-del>ลบ</button></div>';
+      row.querySelector('[data-open]').onclick = function () { SG.openVersion(v.id); setFileName(v.name); localStorage.setItem('xls2_savedAt', String(v.savedAt || Date.now())); $('mVersions').classList.remove('open'); refresh(); };
+      row.querySelector('[data-del]').onclick = function () { if (confirm('ลบ “' + v.name + '”?')) { XL2.store.deleteVersion(v.id); renderVersions(); } };
+      host.appendChild(row);
+    });
+  }
+
+  // ---- Margin ± colors ----
+  var condSel = { pos: null, neg: null };
+  // ระบบพรีวิวก่อนบันทึก: เปลี่ยนสีในแท็บจะไม่มีผลจริงจนกว่าจะกดบันทึก
+  var pend = {};
+  var COLOR_KEYS = ['xls2_dragcolor', 'xls2_dragbg', 'xls2_clipcolor', 'xls2_clipbg', 'xls2_rowhdrbg', 'xls2_rowhdrfg', 'xls2_colhdrbg', 'xls2_colhdrfg', 'xls2_admbg', 'xls2_admfg', 'xls2_admpat', 'xls2_lockicon'];
+  var setUndoSnap = null;
+  function pv(key) { return (key in pend) ? pend[key] : (localStorage.getItem(key) || ''); }
+  function snapshotSettings() { var o = { cond: SG.getCondColors() }; COLOR_KEYS.forEach(function (k) { o[k] = localStorage.getItem(k); }); return o; }
+  function restoreSettings(o) { COLOR_KEYS.forEach(function (k) { if (o[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, o[k]); }); applyMarkColors(); applyHdrColors(); applyAdmStyle(); if (o.cond) SG.setCondColors(o.cond); }
+  function buildCondGrid(hostId, kind) {
+    var host = $(hostId); host.innerHTML = '';
+    XL2.FONT_PALETTE.filter(function (p) { return p.c; }).forEach(function (p) {
+      var b = document.createElement('div');
+      b.className = 'sw swfont'; b.textContent = 'A'; b.style.color = '#' + p.c; b.title = p.n;
+      if (p.c === 'FFFFFF') b.style.background = '#999';
+      b.onclick = function () {
+        condSel[kind] = p.c;
+        host.querySelectorAll('.sw').forEach(function (x) { x.style.outline = ''; });
+        b.style.outline = '2px solid #1d6f42';
+        $('condPrevPos').style.color = '#' + (condSel.pos || '008000');
+        $('condPrevNeg').style.color = '#' + (condSel.neg || 'C00000');
+      };
+      host.appendChild(b);
+    });
+    var row = document.createElement('div'); row.className = 'cust-row';
+    var lab = document.createElement('label'); lab.className = 'cust-pick';
+    var inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + (condSel[kind] || (kind === 'pos' ? '008000' : 'C00000'));
+    inp.oninput = function () {
+      condSel[kind] = inp.value.replace('#', '');
+      host.querySelectorAll('.sw').forEach(function (x) { x.style.outline = ''; });
+      $('condPrevPos').style.color = '#' + (condSel.pos || '008000');
+      $('condPrevNeg').style.color = '#' + (condSel.neg || 'C00000');
+    };
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(' เลือกสีเอง…'));
+    row.appendChild(lab); host.appendChild(row);
+  }
+  $('condChip').onclick = function (e) {
+    e.stopPropagation();
+    openSettings('margin');
+  };
+  // ลากหน้าต่างตั้งค่าด้วยหัว (แถบส้มด้านบน)
+  (function () {
+    var h = document.querySelector('#mCond .dlg h3'); if (!h) return;
+    var dlg = document.querySelector('#mCond .dlg');
+    h.style.cursor = 'grab'; var ox = 0, oy = 0, sx = 0, sy = 0, on = false;
+    h.addEventListener('mousedown', function (e) {
+      on = true; var m = (dlg.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/));
+      ox = m ? parseFloat(m[1]) : 0; oy = m ? parseFloat(m[2]) : 0; sx = e.clientX; sy = e.clientY;
+      document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true); e.preventDefault();
+    });
+    function mv(e) { if (!on) return; dlg.style.transform = 'translate(' + (ox + e.clientX - sx) + 'px,' + (oy + e.clientY - sy) + 'px)'; }
+    function up() { on = false; document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); }
+  })();
+  function openSettings(tab) {
+    pend = {};
+    var dlg0 = document.querySelector('#mCond .dlg'); if (dlg0) dlg0.style.transform = '';   // รีเซ็ตตำแหน่งลากทุกครั้งที่เปิด
+    var cur = SG.getCondColors();
+    condSel = { pos: cur.pos, neg: cur.neg };
+    buildCondGrid('condPosGrid', 'pos');
+    buildCondGrid('condNegGrid', 'neg');
+    $('condPrevPos').style.color = '#' + cur.pos;
+    $('condPrevNeg').style.color = '#' + cur.neg;
+    buildMarkGrid('dragGrid', 'dragcolor', 'F47C20', false);
+    buildMarkGrid('dragBgGrid', 'dragbg', '', true);
+    buildMarkGrid('clipGrid', 'clipcolor', '0a8f3c', false);
+    buildMarkGrid('clipBgGrid', 'clipbg', '', true);
+    buildHdrGrid('rowhdrBgGrid', 'rowhdrbg', 'EFEFEF', '--rowhdr-bg');
+    buildHdrGrid('rowhdrFgGrid', 'rowhdrfg', '777777', '--rowhdr-fg');
+    buildHdrGrid('colhdrBgGrid', 'colhdrbg', 'FFE3C2', '--colhdr-bg');
+    buildHdrGrid('colhdrFgGrid', 'colhdrfg', '8a4a0a', '--colhdr-fg');
+    buildAdmColorGrid('admBgGrid', 'admbg');
+    buildAdmColorGrid('admFgGrid', 'admfg');
+    buildAdmExtras();
+    updAdmPrev();
+    updHdrPrev();
+    updMarkPrev('drag'); updMarkPrev('clip');
+    switchSetTab(tab || 'margin');
+    $('mCond').classList.add('open');
+  }
+  // ---- สีเส้นประ/พื้นหลัง ลาก/คัดลอก-ตัด-วาง ----
+  var MARK_DEFAULT = { dragcolor: 'F47C20', clipcolor: '0a8f3c' };
+  function rawMark(key) { return (localStorage.getItem('xls2_' + key) || ''); }
+  function markColor(key) { return (rawMark(key).replace('#', '')) || MARK_DEFAULT[key] || ''; }
+  function bgTint(key, defColor) {
+    var v = rawMark(key);
+    if (v === 'none') return 'transparent';
+    v = v.replace('#', '');
+    if (!v) return defColor ? '#' + defColor + '5a' : 'transparent';
+    return '#' + v + '5a';
+  }
+  function applyMarkColors() {
+    var dl = markColor('dragcolor'), cl = markColor('clipcolor');
+    document.documentElement.style.setProperty('--fill-color', '#' + dl);
+    document.documentElement.style.setProperty('--fill-bg', bgTint('dragbg', dl));
+    document.documentElement.style.setProperty('--cpm-color', '#' + cl);
+    document.documentElement.style.setProperty('--cpm-fade', '#' + cl + '40');
+    document.documentElement.style.setProperty('--cpm-bg', bgTint('clipbg', ''));
+  }
+  function updMarkPrev(kind) {
+    function mc(sk, def) { return (pv('xls2_' + sk).replace('#', '')) || def; }
+    function bg(sk, defColor) { var v = pv('xls2_' + sk); if (v === 'none') return 'transparent'; v = v.replace('#', ''); if (!v) return defColor ? '#' + defColor + '5a' : 'transparent'; return '#' + v + '5a'; }
+    if (kind === 'drag') {
+      var dp = $('dragPrev'); if (dp) { dp.style.outline = '1.6px solid #' + mc('dragcolor', 'F47C20'); dp.style.background = bg('dragbg', mc('dragcolor', 'F47C20')); }
+    } else {
+      var cp = $('clipPrev'); if (cp) { cp.style.outline = '1.5px dashed #' + mc('clipcolor', '0a8f3c'); cp.style.background = bg('clipbg', ''); }
+    }
+  }
+  function buildMarkGrid(hostId, storeKey, defColor, isBg) {
+    var host = $(hostId); if (!host) return; host.innerHTML = '';
+    var fullKey = 'xls2_' + storeKey;
+    var curRaw = pv(fullKey).replace('#', '').toUpperCase();
+    var which = storeKey.indexOf('drag') === 0 ? 'drag' : 'clip';
+    function choose(val, el) { pend[fullKey] = val; host.querySelectorAll('.sw').forEach(function (x) { x.classList.remove('selmark'); }); if (el) el.classList.add('selmark'); updMarkPrev(which); }
+    if (isBg) {
+      var none = document.createElement('span');
+      none.className = 'sw none' + (pv(fullKey) === 'none' || (!curRaw && !defColor) ? ' selmark' : '');
+      none.title = 'ไม่มีพื้นหลัง';
+      none.onclick = function () { choose('none', none); };
+      host.appendChild(none);
+    }
+    XL2.FONT_PALETTE.filter(function (p) { return p.c; }).forEach(function (p) {
+      var sw = document.createElement('span');
+      sw.className = 'sw' + (p.c.toUpperCase() === curRaw ? ' selmark' : '');
+      sw.style.background = '#' + p.c; sw.title = p.n || '';
+      sw.onclick = function () { choose(p.c, sw); };
+      host.appendChild(sw);
+    });
+    var row = document.createElement('div'); row.className = 'cust-row';
+    var lab = document.createElement('label'); lab.className = 'cust-pick';
+    var inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + (curRaw || (defColor || 'F47C20'));
+    inp.oninput = function () { choose(inp.value.replace('#', ''), null); };
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(' เลือกสีเอง…'));
+    row.appendChild(lab); host.appendChild(row);
+  }
+  applyMarkColors();
+  // ---- สีหัวแถว/หัวคอลัมน์ (ตกแต่งแยกกัน) ----
+  var HDR_DEF = { rowhdrbg: 'EFEFEF', rowhdrfg: '777777', colhdrbg: 'FFE3C2', colhdrfg: '8a4a0a' };
+  function hdrColor(k) { return ((localStorage.getItem('xls2_' + k) || '').replace('#', '')) || HDR_DEF[k]; }
+  function applyHdrColors() {
+    document.documentElement.style.setProperty('--rowhdr-bg', '#' + hdrColor('rowhdrbg'));
+    document.documentElement.style.setProperty('--rowhdr-fg', '#' + hdrColor('rowhdrfg'));
+    document.documentElement.style.setProperty('--colhdr-bg', '#' + hdrColor('colhdrbg'));
+    document.documentElement.style.setProperty('--colhdr-fg', '#' + hdrColor('colhdrfg'));
+  }
+  function updHdrPrev() {
+    function hc(k) { return (pv('xls2_' + k).replace('#', '')) || HDR_DEF[k]; }
+    var rp = $('rowhdrPrev'); if (rp) { rp.style.background = '#' + hc('rowhdrbg'); rp.style.color = '#' + hc('rowhdrfg'); }
+    var cp = $('colhdrPrev'); if (cp) { cp.style.background = '#' + hc('colhdrbg'); cp.style.color = '#' + hc('colhdrfg'); }
+  }
+  function buildHdrGrid(hostId, storeKey, def, cssVar) {
+    var host = $(hostId); if (!host) return; host.innerHTML = '';
+    var fullKey = 'xls2_' + storeKey;
+    var cur = (pv(fullKey).replace('#', '') || HDR_DEF[storeKey]).toUpperCase();
+    function choose(val, el) { pend[fullKey] = val; host.querySelectorAll('.sw').forEach(function (x) { x.classList.remove('selmark'); }); if (el) el.classList.add('selmark'); updHdrPrev(); }
+    XL2.FONT_PALETTE.filter(function (p) { return p.c; }).forEach(function (p) {
+      var sw = document.createElement('span');
+      sw.className = 'sw' + (p.c.toUpperCase() === cur ? ' selmark' : '');
+      sw.style.background = '#' + p.c; sw.title = p.n || '';
+      sw.onclick = function () { choose(p.c, sw); };
+      host.appendChild(sw);
+    });
+    var row = document.createElement('div'); row.className = 'cust-row';
+    var lab = document.createElement('label'); lab.className = 'cust-pick';
+    var inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + (pv(fullKey).replace('#', '') || HDR_DEF[storeKey]);
+    inp.oninput = function () { choose(inp.value.replace('#', ''), null); };
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(' เลือกสีเอง…'));
+    row.appendChild(lab); host.appendChild(row);
+  }
+  applyHdrColors();
+  // ---- แถว/คอลัมน์พิเศษ (ล็อก ซ่อนจากผู้ใช้) ----
+  var LOCK_ICONS = ['\uD83D\uDD12', '\uD83D\uDC51', '\u2B50', '\uD83D\uDEE1\uFE0F', '\uD83D\uDC8E', '\uD83D\uDD11', '\uD83D\uDEAB', '\uD83D\uDCCC', '\u26A1', '\uD83D\uDD25'];
+  function hexRgb(h) { h = (h || '').replace('#', ''); if (h.length === 3) h = h.split('').map(function (x) { return x + x; }).join(''); if (h.length !== 6) return '192,57,43'; var n = parseInt(h, 16); return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255); }
+  function patCss(p, hex) { var c = hexRgb(hex); if (p === 'dots') return 'radial-gradient(rgba(' + c + ',.5) 1.1px, transparent 1.6px)'; if (p === 'none') return 'none'; return 'repeating-linear-gradient(45deg, rgba(' + c + ',.22) 0 4px, transparent 4px 8px)'; }
+  function applyAdmStyle() {
+    var bg = (localStorage.getItem('xls2_admbg') || '').replace('#', '');
+    var fg = (localStorage.getItem('xls2_admfg') || '').replace('#', '');
+    var pat = localStorage.getItem('xls2_admpat') || 'stripe';
+    var ic = localStorage.getItem('xls2_lockicon') || '\uD83D\uDD12';
+    var rs = document.documentElement.style;
+    rs.setProperty('--adm-bg', bg ? '#' + bg : 'transparent');
+    rs.setProperty('--adm-fg', fg ? '#' + fg : 'inherit');
+    rs.setProperty('--adm-pat', patCss(pat, fg || bg));
+    rs.setProperty('--adm-patsize', pat === 'dots' ? '6px 6px' : 'auto');
+    rs.setProperty('--lock-icon', '"' + ic + '"');
+  }
+  function updAdmPrev() {
+    var p = $('admPrev'); if (!p) return;
+    var bg = (pv('xls2_admbg').replace('#', '')) , fg = (pv('xls2_admfg').replace('#', ''));
+    var pat = pv('xls2_admpat') || 'stripe', ic = pv('xls2_lockicon') || '\uD83D\uDD12';
+    p.style.backgroundColor = bg ? '#' + bg : '#fff5f4';
+    p.style.color = fg ? '#' + fg : '#333';
+    p.style.backgroundImage = patCss(pat, fg || bg);
+    p.style.backgroundSize = pat === 'dots' ? '6px 6px' : 'auto';
+    p.textContent = 'ตัวอย่างแถว/คอลัมน์พิเศษ ' + ic;
+  }
+  function buildAdmColorGrid(hostId, storeKey) {
+    var host = $(hostId); if (!host) return; host.innerHTML = '';
+    var fullKey = 'xls2_' + storeKey;
+    var cur = pv(fullKey).replace('#', '').toUpperCase();
+    function choose(val, el) { pend[fullKey] = val; host.querySelectorAll('.sw').forEach(function (x) { x.classList.remove('selmark'); }); if (el) el.classList.add('selmark'); updAdmPrev(); }
+    var none = document.createElement('span');
+    none.className = 'sw none' + (!cur ? ' selmark' : ''); none.title = 'ไม่กำหนด (ค่าเดิม)';
+    none.onclick = function () { choose('', none); };
+    host.appendChild(none);
+    XL2.FONT_PALETTE.filter(function (p) { return p.c; }).forEach(function (p) {
+      var sw = document.createElement('span'); sw.className = 'sw' + (p.c.toUpperCase() === cur ? ' selmark' : '');
+      sw.style.background = '#' + p.c; sw.title = p.n || ''; sw.onclick = function () { choose(p.c, sw); };
+      host.appendChild(sw);
+    });
+    var row = document.createElement('div'); row.className = 'cust-row';
+    var lab = document.createElement('label'); lab.className = 'cust-pick';
+    var inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + (cur || 'FBDBD7');
+    inp.oninput = function () { choose(inp.value.replace('#', ''), null); };
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(' เลือกสีเอง…'));
+    row.appendChild(lab); host.appendChild(row);
+  }
+  function buildAdmExtras() {
+    var pp = $('admPatPick');
+    if (pp) { var curp = pv('xls2_admpat') || 'stripe'; pp.querySelectorAll('.pat-opt').forEach(function (o) { o.classList.toggle('on', o.dataset.pat === curp); o.onclick = function () { pend['xls2_admpat'] = o.dataset.pat; pp.querySelectorAll('.pat-opt').forEach(function (x) { x.classList.remove('on'); }); o.classList.add('on'); updAdmPrev(); }; }); }
+    var ip = $('lockIconPick');
+    if (ip) { ip.innerHTML = ''; var curi = pv('xls2_lockicon') || '\uD83D\uDD12'; LOCK_ICONS.forEach(function (em) { var o = document.createElement('span'); o.className = 'ic-opt' + (em === curi ? ' on' : ''); o.textContent = em; o.onclick = function () { pend['xls2_lockicon'] = em; ip.querySelectorAll('.ic-opt').forEach(function (x) { x.classList.remove('on'); }); o.classList.add('on'); updAdmPrev(); }; ip.appendChild(o); }); }
+  }
+  applyAdmStyle();
+  function switchSetTab(name) {
+    document.querySelectorAll('#mCond .settab').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === name); });
+    document.querySelectorAll('#mCond .settab-pane').forEach(function (p) { p.style.display = p.dataset.pane === name ? '' : 'none'; });
+    if (typeof colorizeTabs === 'function') colorizeTabs();
+    $('condOk').style.display = (name === 'margin' || name === 'drag' || name === 'clip' || name === 'rowhdr' || name === 'colhdr' || name === 'special') ? '' : 'none';
+  }
+  document.querySelectorAll('#mCond .settab').forEach(function (b) {
+    b.onclick = function () { if (b._moved) { b._moved = false; return; } switchSetTab(b.dataset.tab); };
+    b.draggable = true;
+    b.addEventListener('dragstart', function (e) { b.classList.add('dragging'); try { e.dataTransfer.setData('text', b.dataset.tab); } catch (er) {} });
+    b.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); openTabColor(b, e); });
+    b.addEventListener('dragend', function () { b.classList.remove('dragging'); document.querySelectorAll('#mCond .settab').forEach(function (x) { x.classList.remove('drophint'); }); saveTabOrder(); });
+    b.addEventListener('dragover', function (e) { e.preventDefault(); b.classList.add('drophint'); });
+    b.addEventListener('dragleave', function () { b.classList.remove('drophint'); });
+    b.addEventListener('drop', function (e) {
+      e.preventDefault(); b.classList.remove('drophint');
+      var drag = document.querySelector('#mCond .settab.dragging'); if (!drag || drag === b) return;
+      var bar = b.parentElement, r = b.getBoundingClientRect();
+      bar.insertBefore(drag, (e.clientX < r.left + r.width / 2) ? b : b.nextSibling);
+      drag._moved = true; saveTabOrder();
+    });
+  });
+  function saveTabOrder() { try { localStorage.setItem('xls2_settaborder', JSON.stringify([].slice.call(document.querySelectorAll('#mCond .settab')).map(function (t) { return t.dataset.tab; }))); } catch (e) {} }
+  // สีประจำแท็บ (คลิกขวาที่แท็บเพื่อเลือกสี)
+  var TAB_PAL = ['F47C20', '2A6FDB', '1F8A5B', 'C0392B', '8E44AD', 'E67E22', '16A085', '111111'];
+  function colorizeTabs() {
+    document.querySelectorAll('#mCond .settab').forEach(function (b) {
+      var t = b.dataset.tab;
+      var bar = localStorage.getItem('xls2_tabcol_' + t), txt = localStorage.getItem('xls2_tabtxt_' + t), bd = localStorage.getItem('xls2_tabbd_' + t);
+      b.style.background = bar ? '#' + bar : '';
+      b.style.color = txt ? '#' + txt : '';
+      b.style.outline = bd ? '2px solid #' + bd : ''; b.style.outlineOffset = bd ? '-1px' : '';
+    });
+  }
+  function openTabColor(tab, e) {
+    var old = document.getElementById('tabColorPop'); if (old) old.remove();
+    var props = [['สีพื้น', 'tabcol'], ['สีตัวอักษร', 'tabtxt'], ['สีเส้นขอบ', 'tabbd']];
+    var pend = {}; props.forEach(function (pr) { pend[pr[1]] = localStorage.getItem('xls2_' + pr[1] + '_' + tab.dataset.tab) || ''; });
+    var p = document.createElement('div'); p.id = 'tabColorPop'; p.className = 'sg-ctx'; p.style.display = 'block'; p.style.padding = '8px'; p.style.zIndex = '320';
+    var html = '<div style="font-size:10.5px;color:#888;margin-bottom:5px;">แต่งแท็บ “' + (tab.textContent || '').trim() + '”</div>';
+    props.forEach(function (pr) {
+      var pk = pr[1], cur = pend[pk];
+      html += '<div style="font-size:10.5px;color:#666;margin:4px 0 3px;">' + pr[0] + '</div><div data-grp="' + pk + '" style="display:flex;gap:4px;flex-wrap:wrap;width:172px;">';
+      TAB_PAL.forEach(function (c) { html += '<span class="tcsw" data-grp="' + pk + '" data-c="' + c + '" style="width:18px;height:18px;border-radius:5px;background:#' + c + ';cursor:pointer;border:1px solid #ccc;' + (c === cur ? 'outline:2px solid #111;outline-offset:1px;' : '') + '"></span>'; });
+      html += '<span class="tcsw" data-grp="' + pk + '" data-c="" style="width:18px;height:18px;border-radius:5px;background:#fff;cursor:pointer;border:1px solid #ccc;display:grid;place-items:center;font-size:10px;' + (!cur ? 'outline:2px solid #111;outline-offset:1px;' : '') + '">✕</span>';
+      html += '<input type="color" class="tccustom" data-grp="' + pk + '" value="#' + (cur || 'F47C20') + '" style="width:22px;height:18px;border:1px solid #c4c4c4;border-radius:4px;padding:0;cursor:pointer;"></div>';
+    });
+    html += '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:9px;border-top:1px dashed #e0d5c5;padding-top:8px;"><button class="btn" id="tcCancel">ยกเลิก</button><button class="btn primary" id="tcSave">บันทึก</button></div>';
+    p.innerHTML = html;
+    document.body.appendChild(p);
+    p.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    p.style.top = Math.min(e.clientY, window.innerHeight - p.offsetHeight - 8) + 'px';
+    function previewTab() {
+      tab.style.background = pend.tabcol ? '#' + pend.tabcol : '';
+      tab.style.color = pend.tabtxt ? '#' + pend.tabtxt : '';
+      tab.style.outline = pend.tabbd ? '2px solid #' + pend.tabbd : ''; tab.style.outlineOffset = pend.tabbd ? '-1px' : '';
+    }
+    function pick(pk, val) { pend[pk] = val; p.querySelectorAll('.tcsw[data-grp="' + pk + '"]').forEach(function (x) { x.style.outline = x.dataset.c === val ? '2px solid #111' : ''; x.style.outlineOffset = '1px'; }); previewTab(); }
+    p.onclick = function (ev) { var s = ev.target.closest('.tcsw'); if (!s) return; pick(s.dataset.grp, s.dataset.c); };
+    p.querySelectorAll('.tccustom').forEach(function (inp) { inp.oninput = function (ev) { ev.stopPropagation(); pick(inp.dataset.grp, inp.value.replace('#', '')); }; });
+    function close(revert) { if (revert) colorizeTabs(); p.remove(); document.removeEventListener('mousedown', onOut, true); document.removeEventListener('keydown', onEsc, true); }
+    p.querySelector('#tcSave').onclick = function (ev) { ev.stopPropagation(); props.forEach(function (pr) { var k = 'xls2_' + pr[1] + '_' + tab.dataset.tab; if (pend[pr[1]]) localStorage.setItem(k, pend[pr[1]]); else localStorage.removeItem(k); }); colorizeTabs(); if (typeof toast === 'function') toast('✓ บันทึกสีแท็บแล้ว'); close(false); };
+    p.querySelector('#tcCancel').onclick = function (ev) { ev.stopPropagation(); close(true); };
+    function onOut(ev) { if (!ev.target.closest('#tabColorPop')) close(true); }
+    function onEsc(ev) { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); close(true); } }
+    setTimeout(function () { document.addEventListener('mousedown', onOut, true); document.addEventListener('keydown', onEsc, true); }, 0);
+  }
+  (function loadTabOrder() {
+    var ord; try { ord = JSON.parse(localStorage.getItem('xls2_settaborder') || 'null'); } catch (e) {}
+    if (!ord) return; var bar = document.querySelector('#mCond .settabs');
+    ord.forEach(function (t) { var el = bar.querySelector('.settab[data-tab="' + t + '"]'); if (el) bar.appendChild(el); });
+  })();
+  colorizeTabs();
+  $('condOk').onclick = function () {
+    setUndoSnap = snapshotSettings();   // เก็บค่าก่อนหน้าไว้ให้ Undo ย้อนได้
+    Object.keys(pend).forEach(function (k) { localStorage.setItem(k, pend[k]); });
+    pend = {};
+    SG.setCondColors({ pos: condSel.pos, neg: condSel.neg });
+    applyMarkColors(); applyHdrColors(); applyAdmStyle();
+    if (typeof toast === 'function') toast('✓ บันทึกการตั้งค่าแล้ว (Undo เพื่อย้อน)');
+    $('mCond').classList.remove('open');
+  };
+  // ยกเลิกในแท็บสี = ทิ้ง pending (ไม่มีผลจริง เพราะยังไม่ได้ apply)
+  $('mCond').querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { pend = {}; }); });
+  // ปุ่มลัดในแต่ละแท็บ
+  function wireSetBtn(id, fn) { var el = $(id); if (el) el.onclick = function () { $('mCond').classList.remove('open'); setTimeout(fn, 60); }; }
+  wireSetBtn('setAutosave', function () { $('saveState').click(); });
+  wireSetBtn('setApi', function () { $('btnApi') && $('btnApi').click(); });
+  wireSetBtn('setTheme', function () { $('btnTheme') && $('btnTheme').click(); });
+  wireSetBtn('setKeys', function () { $('btnKeys') && $('btnKeys').click(); });
+
+  // ---- sheet bar (หมวด) ----
+  function renderSheets() {
+    var sheets = XL2.store.sheetsList(), cur = XL2.store.curSheet();
+    function opt(s) { return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + '>' + XL2.esc(s.name) + '</option>'; }
+    var normal = sheets.filter(function (s) { return !s.archived; });
+    var arch = sheets.filter(function (s) { return s.archived; });
+    $('sheetSel').innerHTML = normal.map(opt).join('') +
+      (arch.length ? '<optgroup label="📦 ประวัติหลังอัพเดท (ย้อนดูได้)">' + arch.map(opt).join('') + '</optgroup>' : '');
+    // ชื่อบนหัวโปรแกรม = ชื่อไฟล์ที่ทำอยู่ (แยกจากชื่อหน้าชีต) · บรรทัดรอง = หมวดที่กำลังดู
+    var curS = sheets.find(function (s) { return s.id === cur; });
+    var t = $('brandTtl');
+    if (t) t.innerHTML = XL2.esc(getFileName()) + '<small>' + (curS ? '📄 ' + XL2.esc(curS.name) : '') + '</small>';
+  }
+  // ---------- ชื่อไฟล์ (เก็บถาวร · แก้ได้ด้วยดับเบิลคลิกที่ชื่อ) ----------
+  var DEFAULT_FILE = 'แฟ้มราคายาง';
+  function getFileName() { var n = (localStorage.getItem('xls2_filename') || '').trim(); return n || DEFAULT_FILE; }
+  function setFileName(n) { n = (n || '').trim(); if (n) { localStorage.setItem('xls2_filename', n); renderSheets(); } }
+  $('sheetSel').onchange = function () {
+    XL2.store.setCurSheet(this.value);
+    SG.reloadSheet();
+    refresh(); renderFltBar();
+  };
+  $('shAdd').onclick = function () {
+    var nm = prompt('ชื่อหมวดใหม่ เช่น ยางเก๋ง-01', '');
+    if (!nm || !nm.trim()) return;
+    nm = nm.trim();
+    var id = 's' + Date.now();
+    var colW = [92, 33, 41, 84, 36, 31, 71, 66, 26, 26, 71, 66, 30, 71, 66, 62, 71, 66, 62, 71, 66, 62, 101];
+    var d = { name: nm, meta: {}, nCols: 23, nRows: 40,
+      cells: { '0:0': { v: nm, t: 'text', s: { bg: 'FFFF99', fc: '0000FF', b: 1, fs: 15, al: 'center' } } },
+      merges: { '0:0': { rs: 1, cs: 23 } }, colW: colW, rowH: [30],
+      adminRows: {}, adminCols: { 6: 1, 10: 1, 13: 1, 15: 1, 16: 1, 18: 1, 19: 1, 21: 1 },
+      rowLinks: {}, changes: {} };
+    XL2.store.saveSheetDoc(id, d);
+    var sheets = XL2.store.sheetsList(); sheets.push({ id: id, name: nm }); XL2.store.saveSheets(sheets);
+    XL2.store.setCurSheet(id);
+    SG.reloadSheet(); renderSheets(); refresh(); renderFltBar();
+  };
+  $('shRen').onclick = function () {
+    var sheets = XL2.store.sheetsList(), cur = XL2.store.curSheet();
+    var s = sheets.find(function (x) { return x.id === cur; }); if (!s) return;
+    var nm = prompt('แก้ไขชื่อหมวด', s.name);
+    if (!nm || !nm.trim()) return;
+    s.name = nm.trim();
+    XL2.store.saveSheets(sheets);
+    SG.getDoc().name = s.name; SG.save();
+    renderSheets(); refresh();
+  };
+  // ลบหมวด: ยืนยัน 2 รอบ + รอ 10 วินาทีก่อนกดยืนยันรอบสุดท้าย
+  var delTimer = null, delStage = 0;
+  function resetDelTimer() { if (delTimer) { clearInterval(delTimer); delTimer = null; } delStage = 0; }
+  $('shDel').onclick = function () {
+    var sheets = XL2.store.sheetsList();
+    if (sheets.length <= 1) { alert('ลบหมวดสุดท้ายไม่ได้ — ต้องมีอย่างน้อย 1 หมวด'); return; }
+    var cur = XL2.store.curSheet();
+    var s = sheets.find(function (x) { return x.id === cur; }); if (!s) return;
+    resetDelTimer();
+    $('delSheetBody').innerHTML = 'ต้องการลบหมวด “<b>' + XL2.esc(s.name) + '</b>”?<br><span style="color:#c0392b;">ข้อมูลทั้งชีตของหมวดนี้จะหายถาวร กู้คืนไม่ได้</span>';
+    var b = $('delSheetBtn');
+    b.disabled = false; b.textContent = '🗑️ ลบ (ยืนยันครั้งที่ 1)';
+    $('mDelSheet').classList.add('open');
+  };
+  $('delSheetBtn').onclick = function () {
+    var b = this;
+    if (delStage === 0) {
+      delStage = 1;
+      var left = 10;
+      b.disabled = true;
+      b.textContent = '⏳ ยืนยันได้ใน ' + left + ' วิ…';
+      delTimer = setInterval(function () {
+        left--;
+        if (left > 0) { b.textContent = '⏳ ยืนยันได้ใน ' + left + ' วิ…'; }
+        else {
+          clearInterval(delTimer); delTimer = null;
+          b.disabled = false;
+          b.style.background = '#c0392b'; b.style.color = '#fff';
+          b.textContent = '🗑️ ยืนยันลบถาวร (ครั้งที่ 2)';
+        }
+      }, 1000);
+      return;
+    }
+    // ครั้งที่ี 2 — ลบจริง
+    var cur = XL2.store.curSheet();
+    var sheets = XL2.store.sheetsList().filter(function (x) { return x.id !== cur; });
+    XL2.store.saveSheets(sheets);
+    XL2.store.deleteSheetDoc(cur);
+    XL2.store.setCurSheet(sheets[0].id);
+    resetDelTimer();
+    b.style.background = ''; b.style.color = '#c0392b';
+    $('mDelSheet').classList.remove('open');
+    SG.reloadSheet(); renderSheets(); refresh(); renderFltBar();
+  };
+  $('mDelSheet').addEventListener('click', function (e) { if (e.target === this || e.target.closest('[data-close]')) resetDelTimer(); });
+
+  function refresh() {
+    renderSheets();
+    enforceArchiveLock();
+    var sc = SG.getSchedule();
+    $('schedChip').textContent = '⏱ ใช้ราคา: ' + (sc ? sc.replace('T', ' ') : 'ทันที');
+    $('schedChip').classList.toggle('hasdate', !!sc);
+  }
+  // schedule dialog
+  $('schedChip').onclick = function () {
+    var cur = SG.getSchedule();
+    $('schedInput').value = cur || '';
+    $('mSched').classList.add('open');
+  };
+  $('schedOk').onclick = function () {
+    SG.setSchedule($('schedInput').value || '');
+    $('mSched').classList.remove('open'); refresh();
+  };
+  $('schedNow').onclick = function () {
+    SG.setSchedule('');
+    $('mSched').classList.remove('open'); refresh();
+  };
+  // โลโก้: คลิกขวา = เมนูในเฟรม (ดูรูปเต็ม / เปลี่ยน / ลบ) — ไม่หลุดจออีก
+  (function logoMenu() {
+    var slot = document.getElementById('brand-logo');
+    if (!slot) return;
+    var menu = null;
+    function closeM() { if (menu) menu.style.display = 'none'; }
+    function sr(sel) { return slot.shadowRoot ? slot.shadowRoot.querySelector(sel) : null; }
+    slot.addEventListener('contextmenu', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (!menu) {
+        menu = document.createElement('div');
+        menu.className = 'sg-ctx';
+        document.body.appendChild(menu);
+        document.addEventListener('mousedown', function (ev) { var t = ev.target; if (!t.closest || !t.closest('.sg-ctx')) closeM(); });
+        document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeM(); });
+      }
+      var img = sr('img');
+      var reg = [];
+      function it(ic, t, fn) { reg.push(fn); return '<div class="ctx-it" data-i="' + (reg.length - 1) + '"><span class="ctx-ic">' + ic + '</span><span class="ctx-tx">' + t + '</span></div>'; }
+      menu.innerHTML =
+        (img && img.src ? it('🔍', 'ดูโลโก้เต็ม', function () {
+          var ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.7);display:grid;place-items:center;cursor:zoom-out;';
+          ov.innerHTML = '<img src="' + img.src + '" style="max-width:70vw;max-height:70vh;background:#fff;border-radius:12px;padding:14px;" />';
+          ov.onclick = function () { ov.remove(); };
+          document.body.appendChild(ov);
+        }) : '') +
+        it('♻️', 'เปลี่ยนโลโก้…', function () {
+          var b = sr('[data-act="replace"]'), f = sr('input[type=file]');
+          if (b) b.click(); else if (f) f.click();
+        }) +
+        (img && img.src ? it('🗑️', 'ลบโลโก้', function () { var b = sr('[data-act="clear"]'); if (b) b.click(); }) : '');
+      menu.style.display = 'block';
+      var vw = window.innerWidth, vh = window.innerHeight;
+      menu.style.left = Math.max(8, Math.min(e.clientX, vw - menu.offsetWidth - 8)) + 'px';
+      menu.style.top = Math.max(8, Math.min(e.clientY + 6, vh - menu.offsetHeight - 8)) + 'px';
+      menu.onclick = function (ev) {
+        var el = ev.target.closest('[data-i]'); if (!el) return;
+        closeM(); reg[+el.dataset.i]();
+      };
+    });
+  })();
+
+  refresh();
+  renderFltBar();
+  // ชื่อไฟล์บนหัว: คลิกขวา = popup ชื่อเต็ม · Esc/คลิกที่อื่น = ปิด
+  function showBrandPop(e) {
+    e.preventDefault(); e.stopPropagation();
+    var old = document.getElementById('brandNamePop');
+    if (old) { old.remove(); return; }
+    var fname = getFileName();
+    var pop = document.createElement('div');
+    pop.id = 'brandNamePop';
+    pop.className = 'sg-ctx';
+    pop.style.display = 'block';
+    pop.style.padding = '10px 14px';
+    pop.style.maxWidth = '360px';
+    pop.innerHTML = '<div style="font-size:11px;color:#888;margin-bottom:3px;">ชื่อไฟล์ปัจจุบัน</div><div style="font-weight:700;font-size:14px;color:#222;word-break:break-word;">' + XL2.esc(fname) + '</div>' + fileTimesHtml();
+    document.body.appendChild(pop);
+    var r = this.getBoundingClientRect();
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.top = (r.bottom + 4) + 'px';
+    function close() { pop.remove(); document.removeEventListener('keydown', onEsc, true); document.removeEventListener('mousedown', onOut, true); }
+    function onEsc(ev) { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); close(); } }
+    function onOut(ev) { var tg = ev.target; if (tg === pop || (tg.closest && (tg.closest('#brandNamePop') || tg.closest('#brandTtl')))) return; close(); }
+    document.addEventListener('keydown', onEsc, true);
+    setTimeout(function () { document.addEventListener('mousedown', onOut, true); }, 0);
+  }
+  // เวลาสร้าง/บันทึกล่าสุด
+  if (!localStorage.getItem('xls2_createdAt')) localStorage.setItem('xls2_createdAt', String(Date.now()));
+  function fmtTime(ms) { if (!ms) return '—'; try { return new Date(+ms).toLocaleString('th-TH'); } catch (e) { return '—'; } }
+  function stampSaved() { localStorage.setItem('xls2_savedAt', String(Date.now())); }
+  function fileTimesHtml() {
+    return '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed #e0d5c5;font-size:11px;color:#666;line-height:1.7;">' +
+      '🕘 สร้างเมื่อ: ' + fmtTime(localStorage.getItem('xls2_createdAt')) + '<br>' +
+      '💾 บันทึกล่าสุด: ' + fmtTime(localStorage.getItem('xls2_savedAt')) + '</div>';
+  }
+  $('brandTtl').addEventListener('click', showBrandPop);
+  $('brandTtl').addEventListener('contextmenu', showBrandPop);
+  $('brandTtl').addEventListener('dblclick', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    var old = document.getElementById('brandNamePop'); if (old) old.remove();
+    var n = prompt('ตั้งชื่อไฟล์ที่กำลังทำ (แสดงบนหัวโปรแกรม)', getFileName());
+    if (n !== null) setFileName(n);
+  });
+  $('brandTtl').style.cursor = 'pointer';
+  $('brandTtl').title = 'คลิก = ดูชื่อไฟล์เต็ม · ดับเบิลคลิก = เปลี่ยนชื่อไฟล์';
+  // ⏳ ออโต้เซฟ (ปรับเวลาได้ — คลิกที่ตัวนับถอยหลัง) · เซฟเอง = เริ่มนับใหม่
+  function autoMin() { var m = parseInt(localStorage.getItem('xls2_autosave_min') || '5', 10); return (m >= 1 && m <= 60) ? m : 5; }
+  var autosaveLeft = autoMin() * 60;
+  function resetAutoTimer() { autosaveLeft = autoMin() * 60; }
+  $('saveState').style.cursor = 'pointer';
+  $('saveState').title = 'คลิกเพื่อตั้งเวลาออโต้เซฟ';
+  $('saveState').onclick = function () {
+    var m = prompt('ตั้งเวลาออโต้เซฟ (นาที 1–60)', String(autoMin()));
+    if (m === null) return;
+    m = parseInt(m, 10);
+    if (!(m >= 1 && m <= 60)) { alert('ใส่ตัวเลข 1–60 นาที'); return; }
+    localStorage.setItem('xls2_autosave_min', String(m));
+    resetAutoTimer();
+  };
+  (function wrapSaves() {
+    var oSave = SG.save, oSaveAs = SG.saveAs;
+    SG.save = function () { var r = oSave.apply(SG, arguments); resetAutoTimer(); return r; };
+    SG.saveAs = function () { var r = oSaveAs.apply(SG, arguments); resetAutoTimer(); return r; };
+  })();
+  setInterval(function () {
+    autosaveLeft--;
+    if (autosaveLeft <= 0) {
+      if (SG.isDirty()) { SG.save(); stampSaved(); }   // ถึงเวลา → เซฟให้ (ถ้าไม่มีอะไรค้าง ข้าม)
+      else resetAutoTimer();
+    }
+  }, 1000);
+
+  setInterval(function () {
+    var s = $('saveState');
+    var mm = Math.floor(Math.max(0, autosaveLeft) / 60);
+    var ss = String(Math.max(0, autosaveLeft) % 60).padStart(2, '0');
+    if (SG.isDirty()) { s.innerHTML = '<span class="unsaved">● ยังไม่เซฟ</span> · ' + mm + ':' + ss; s.classList.remove('clean'); }
+    else { s.textContent = '✓ บันทึกแล้ว · ⏳ ' + mm + ':' + ss; s.classList.add('clean'); var sv = localStorage.getItem('xls2_savedAt'); s.title = sv ? 'บันทึกล่าสุด: ' + new Date(+sv).toLocaleString('th-TH') : 'บันทึกแล้ว'; }
+    // ช่องฟอนต์สะท้อนฟอนต์ของช่องที่เลือก (เหมือน Excel)
+    var ffSel = $('fontFam');
+    if (ffSel && document.activeElement !== ffSel) {
+      var cellF = SG.getDoc().cells[SG.sel.r + ':' + SG.sel.c];
+      var ffv = (cellF && cellF.s && cellF.s.ff) ? cellF.s.ff : 'Arial';
+      if ([...ffSel.options].some(function (o) { return o.value === ffv; })) ffSel.value = ffv;
+      else ffSel.value = '';
+    }
+  }, 700);
+
+  // 🧩 ปรับแต่ง toolbar: ลากได้ทุกที่ (ข้ามกลุ่ม/ข้ามแถว/เข้า-ออก ⋯) · คลิกขวา = สั้น/ยาว · จดจำถาวร
+  (function tbCustom() {
+    var KEY = 'xls2_toolbar_layout2';
+    var morePop = $('morePop');
+    var ribbonEl = document.querySelector('.ribbon');
+    var fxbarEl = document.querySelector('.fxbar');
+    function grps() { return [].slice.call(document.querySelectorAll('.ribbon .grp')); }
+    function saveLayout() {
+      var data = [];
+      grps().forEach(function (g, gi) {
+        g.querySelectorAll('.btn[id]').forEach(function (b) {
+          if (b.closest('.swpop')) return;
+          data.push({ id: b.id, g: gi, wide: b.classList.contains('wide') });
+        });
+      });
+      fxbarEl.querySelectorAll('.btn[id]').forEach(function (b) { data.push({ id: b.id, fx: 1, wide: b.classList.contains('wide') }); });
+      morePop.querySelectorAll('.btn[id]').forEach(function (b) { data.push({ id: b.id, more: 1, wide: b.classList.contains('wide') }); });
+      localStorage.setItem(KEY, JSON.stringify(data));
+    }
+    function loadLayout() {
+      var data; try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+      if (!data || !data.length) return;
+      var gl = grps();
+      data.forEach(function (rec) {
+        var el = document.getElementById(rec.id);
+        if (!el || !el.classList.contains('btn')) return;
+        var host = rec.more ? morePop : (rec.fx ? fxbarEl : gl[rec.g]);
+        if (host) host.appendChild(el);
+        el.classList.toggle('wide', !!rec.wide);
+      });
+    }
+    var dragEl = null;
+    [].slice.call(document.querySelectorAll('.ribbon .btn[id], #morePop .btn[id], #fontFam')).forEach(function (b) {
+      b.draggable = true;
+      b.addEventListener('dragstart', function (e) { dragEl = b; try { e.dataTransfer.setData('text', b.id); } catch (er) {} });
+      b.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        b.classList.toggle('wide');
+        saveLayout();
+      });
+    });
+    // คลิกขวาที่ปุ่ม/ช่องฟอนต์ใดๆ บนแถบเครื่องมือ = ยุบ/ขยายข้อความ (ทำงานแม้ย้ายไปแถวค้นหา · กันเมนู Excel เด้ง)
+    document.addEventListener('contextmenu', function (e) {
+      var b = e.target.closest('.ribbon .btn[id], .fxbar .btn[id]');
+      if (!b) return;
+      if (e.target.closest('.swpop')) return;   // ในกล่อง popup ไม่ต้องยุบ
+      e.preventDefault(); e.stopPropagation();
+      b.classList.toggle('wide');
+      saveLayout();
+    }, true);
+    function dropAt(host, e) {
+      if (!dragEl) return;
+      var tgt = e.target.closest('.btn[id]');
+      if (tgt && tgt !== dragEl && !tgt.closest('.swpop')) {
+        var r = tgt.getBoundingClientRect();
+        tgt.parentElement.insertBefore(dragEl, e.clientX < r.left + r.width / 2 ? tgt : tgt.nextSibling);
+      } else {
+        var container = e.target.closest('.grp');
+        if (container && host === ribbonEl) { container.appendChild(dragEl); }
+        else {
+          // พื้นที่ว่าง: หาปุ่มที่ใกล้ที่สุดในแถวเดียวกัน แล้วแทรกข้างๆ
+          var best = null, bd = 1e9;
+          host.querySelectorAll('.btn[id]').forEach(function (b) {
+            if (b === dragEl || b.closest('.swpop')) return;
+            var br = b.getBoundingClientRect();
+            if (Math.abs((br.top + br.height / 2) - e.clientY) > 24) return;   // เฉพาะแถวเดียวกัน
+            var d = Math.abs((br.left + br.width / 2) - e.clientX);
+            if (d < bd) { bd = d; best = b; }
+          });
+          if (best) {
+            var br2 = best.getBoundingClientRect();
+            best.parentElement.insertBefore(dragEl, e.clientX < br2.left + br2.width / 2 ? best : best.nextSibling);
+          } else if (host === morePop) morePop.appendChild(dragEl);
+          else if (host === fxbarEl) fxbarEl.appendChild(dragEl);
+          else (grps().slice(-1)[0] || host).appendChild(dragEl);
+        }
+      }
+      dragEl = null;
+      saveLayout();
+    }
+    [ribbonEl, fxbarEl, morePop].forEach(function (host) {
+      host.addEventListener('dragover', function (e) { e.preventDefault(); });
+      host.addEventListener('drop', function (e) { e.preventDefault(); e.stopPropagation(); dropAt(host, e); });
+    });
+    // ลากไอคอนมาวางที่ปุ่ม ⋯ = เก็บไอคอนนั้นเข้าเมนู (ออกจากแถบ)
+    var moreBtn = document.getElementById('btnMore');
+    if (moreBtn) {
+      moreBtn.addEventListener('dragover', function (e) { e.preventDefault(); e.stopPropagation(); moreBtn.classList.add('drophot'); });
+      moreBtn.addEventListener('dragleave', function () { moreBtn.classList.remove('drophot'); });
+      moreBtn.addEventListener('drop', function (e) {
+        e.preventDefault(); e.stopPropagation(); moreBtn.classList.remove('drophot');
+        if (dragEl && dragEl !== moreBtn && !dragEl.closest('.swpop')) { morePop.appendChild(dragEl); dragEl = null; saveLayout(); if (typeof groupMorePop === 'function') groupMorePop(); }
+      });
+    }
+    loadLayout();
+    // ปุ่มไฟล์ (บันทึก/บันทึกเป็น/เปิดเก่า) ต้องอยู่รวมในเมนูเดียวเสมอ — กันโดนลากแยกออก
+    ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore', 'btnGDrive'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) { if (!b.closest('#filePop')) document.getElementById('filePop').appendChild(b); b.draggable = false; }
+    });
+    try {
+      var L = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (L && L.length) { var L2 = L.filter(function (r) { return ['btnSaveAs', 'btnVersions', 'btnBackup', 'btnRestore', 'btnGDrive'].indexOf(r.id) < 0; }); if (L2.length !== L.length) localStorage.setItem(KEY, JSON.stringify(L2)); }
+    } catch (e) {}
+  })();
+
+  // ⏀ ย่อ/ขยายชุดเครื่องมือแต่ละกลุ่มได้เอง (จดจำถาวร) — คลิกลูกศรเล็กหน้ากลุ่ม หรือดับเบิลคลิกพื้นว่างของกลุ่ม
+  (function grpCollapse() {
+    var KEY = 'xls2_grp_collapsed';
+    function load() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } }
+    function save(a) { localStorage.setItem(KEY, JSON.stringify(a)); }
+    var grps = [].slice.call(document.querySelectorAll('.ribbon .grp')).filter(function (g) {
+      return !g.classList.contains('grp-status') && g.querySelector('.btn');   // ข้ามกลุ่มว่าง (ปุ่มถูกย้ายออกหมดแล้ว)
+    });
+    grps.forEach(function (g, i) {
+      var h = document.createElement('button');
+      h.className = 'grp-tg';
+      h.title = 'ย่อ/ขยายชุดเครื่องมือนี้';
+      h.textContent = '▾';
+      g.insertBefore(h, g.firstChild);
+      function toggle() {
+        g.classList.toggle('clps');
+        var arr = load().filter(function (x) { return x !== i; });
+        if (g.classList.contains('clps')) arr.push(i);
+        save(arr);
+      }
+      h.onclick = function (e) { e.stopPropagation(); toggle(); };
+      g.addEventListener('dblclick', function (e) { if (e.target === g) toggle(); });
+    });
+    load().forEach(function (i) { if (grps[i]) grps[i].classList.add('clps'); });
+  })();
+
+  // Esc ปิดหน้าต่าง/เมนูทุกชนิดของโปรแกรม
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.modal.open').forEach(function (m) { m.classList.remove('open'); });
+    ['swPop', 'fontPop', 'bdPop', 'morePop'].forEach(function (id) { var p = $(id); if (p) p.classList.remove('open'); });
+  });
+
+  window.addEventListener('beforeunload', function (e) { if (SG.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+})();
+</script>
+<script>
+/* Service Worker — โหลดไฟล์ล่าสุดอัตโนมัติ (ไม่ต้องกด Ctrl+Shift+R) + เปิดออฟไลน์ได้ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
