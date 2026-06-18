@@ -46,10 +46,291 @@
   // ---------- evaluation ----------
   var cache = null;
   function invalidate() { cache = null; }
+  // ---------- DB clean-model cache (ชั้นกลาง DBX) ----------
+  // dbCache: code13 -> clean model (sync) · เติมแบบ async ตอน render/refresh
+  var dbCache = {};
+  function clearDbCache() { dbCache = {}; dbTried = {}; }   // ล้างแคชเพื่อบังคับดึง clean model ใหม่ (เมื่อ enrich/flags เปลี่ยน)
+  function rowCode(r) { var v = (doc.rowLinks && doc.rowLinks[r]) || null; return (v && /^\d{13}$/.test(v)) ? v : null; }   // code13 ของแถว (เฉพาะรูปแบบ 13 หลัก)
+  function isCode13(v) { return !!v && /^\d{13}$/.test(v); }
+  function dbProduct(code) { return code ? dbCache[code] : null; }
+  // สถานะลิงก์ของแถว: null=ไม่ลิงก์ · 'ok' · 'inactive' · 'missing' · 'loading'
+  function rowLinkStatus(r) {
+    var code = rowCode(r); if (!code) return null;
+    var p = dbCache[code];
+    if (p) return (p.status && p.status !== 'active') ? 'inactive' : 'ok';
+    return dbTried[code] ? 'missing' : 'loading';
+  }
+  function rowLinkLabel(r) {
+    var code = rowCode(r); if (!code) return '';
+    var p = dbCache[code];
+    if (p) return code + ' · ' + p.name + (p.status !== 'active' ? ' (inactive)' : '');
+    return dbTried[code] ? ('⚠️ ลิงก์ค้าง — ไม่พบ "' + code + '" ใน DB') : (code + ' · กำลังโหลด…');
+  }
+  // แม่กุญแจ (ซ่อนจากผู้ใช้) — ปรับไอคอน/คำอธิบายได้ในตั้งค่า
+  function lockGlyph() { return localStorage.getItem('xls2_lockglyph') || '🔒'; }
+  function lockDesc() { return localStorage.getItem('xls2_lockdesc') || 'ซ่อนจากผู้ใช้'; }
+  // ---------- ขั้น4: ไอคอนสถานะของช่อง (auto / manual / mixed) ----------
+  function statusIconsFor(r) {
+    if (!window.DBX) return [];
+    var code = rowCode(r); var p = code ? dbCache[code] : null; if (!p) return [];
+    var sc = (doc.statusCell && doc.statusCell[r]) || { mode: 'auto' };
+    var auto = window.DBX.computeStatus(p, 4);
+    function byKey(k) { return window.DBX.statusDefByKey(k); }
+    if (sc.mode === 'manual') return (sc.pinned || []).map(byKey).filter(Boolean).slice(0, 4);
+    if (sc.mode === 'mixed') {
+      var merged = (sc.pinned || []).map(byKey).filter(Boolean);
+      auto.forEach(function (d) { if (!merged.some(function (m) { return m.key === d.key; })) merged.push(d); });
+      return merged.slice(0, 4);
+    }
+    if (sc.hidden && sc.hidden.length) auto = auto.filter(function (d) { return sc.hidden.indexOf(d.key) < 0; });
+    return auto.slice(0, 4);
+  }
+  function statusCellInner(r) {
+    var icons = statusIconsFor(r);
+    if (!icons.length) return '';
+    var corners = ['tr', 'tl', 'bl', 'br'];   // 1=บนขวา · 2=บนซ้าย · 3=ล่างซ้าย · 4=ล่างขวา
+    return '<span class="sg-status n' + icons.length + '">' + icons.slice(0, 4).map(function (d, i) {
+      return '<span class="sg-st-ic c-' + corners[i] + '" data-stkey="' + esc(d.key) + '"' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + '\uFE0E</span>';
+    }).join('') + '</span>';
+  }
+  // เมนูคลิกขวาช่องสถานะ: auto / manual / mixed + เลือกไอคอน pin
+  var statusMenuEl = null;
+  function openStatusMenu(r, c, x, y) {
+    if (!window.DBX) return;
+    if (!statusMenuEl) { statusMenuEl = document.createElement('div'); statusMenuEl.className = 'sg-ctx sg-statusmenu'; document.body.appendChild(statusMenuEl); }
+    var sc = (doc.statusCell && doc.statusCell[r]) || { mode: 'auto', pinned: [] };
+    function radio(mode, label) { return '<div class="ctx-it" data-mode="' + mode + '"><span class="ctx-ic">' + (sc.mode === mode ? '●' : '○') + '</span>' + label + '</div>'; }
+    var defs = window.DBX.statusDefs();
+    var fav = window.DBX.iconFav();
+    var pinHtml = defs.map(function (d) {
+      var on = (sc.pinned || []).indexOf(d.key) >= 0;
+      return '<span class="stm-pin' + (on ? ' on' : '') + '" data-pin="' + esc(d.key) + '" title="' + esc(d.label) + '"' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + '</span>';
+    }).join('');
+    statusMenuEl.innerHTML =
+      '<div class="stm-drag">⠿ โหมด/ไอคอนสถานะ<span class="stm-x">✕</span></div>' +
+      '<div class="ctx-row"><div class="ctx-rowlab">โหมดช่องสถานะ</div></div>' +
+      radio('auto', 'อัตโนมัติ (คำนวณจากสต็อก/ธง)') +
+      radio('manual', 'กำหนดเอง (เฉพาะไอคอนที่ pin)') +
+      radio('mixed', 'ผสม (auto + pin เพิ่ม)') +
+      '<div class="ctx-sep"></div>' +
+      '<div class="ctx-row"><div class="ctx-rowlab">Pin ไอคอน (คลิกเปิด/ปิด)</div></div>' +
+      '<div class="stm-pins">' + pinHtml + '</div>';
+    statusMenuEl.style.display = 'block';
+    statusMenuEl.style.transform = 'none';
+    statusMenuEl.style.left = Math.min(x, window.innerWidth - statusMenuEl.offsetWidth - 8) + 'px';
+    statusMenuEl.style.top = Math.min(y, window.innerHeight - statusMenuEl.offsetHeight - 8) + 'px';
+    makeDraggable(statusMenuEl, '.stm-drag');
+    function ensure() { doc.statusCell = doc.statusCell || {}; doc.statusCell[r] = doc.statusCell[r] || { mode: 'auto', pinned: [] }; return doc.statusCell[r]; }
+    function navItems() { return [].slice.call(statusMenuEl.querySelectorAll('[data-mode],[data-pin]')); }
+    function setKb(el) { navItems().forEach(function (n) { n.classList.toggle('kbsel', n === el); }); if (el) el.scrollIntoView({ block: 'nearest' }); }
+    setKb(statusMenuEl.querySelector('[data-mode="' + sc.mode + '"]'));
+    if (statusMenuEl._stmKey) document.removeEventListener('keydown', statusMenuEl._stmKey);
+    statusMenuEl._stmKey = function (e) {
+      if (statusMenuEl.style.display === 'none') return;
+      var items = navItems(), cur = statusMenuEl.querySelector('.kbsel'), idx = items.indexOf(cur);
+      if (e.key === 'Escape') { e.preventDefault(); statusMenuEl.style.display = 'none'; document.removeEventListener('keydown', statusMenuEl._stmKey); }
+      else if (e.key === 'Enter') { e.preventDefault(); (cur || items[0]) && (cur || items[0]).click(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); setKb(items[Math.min(items.length - 1, idx + 1)]); }
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); setKb(items[Math.max(0, idx < 0 ? 0 : idx - 1)]); }
+    };
+    document.addEventListener('keydown', statusMenuEl._stmKey);
+    statusMenuEl.onclick = function (e) {
+      if (e.target.closest('.stm-x')) { statusMenuEl.style.display = 'none'; document.removeEventListener('keydown', statusMenuEl._stmKey); return; }
+      var md = e.target.closest('[data-mode]');
+      if (md) { pushUndo(); var s = ensure(); s.mode = md.dataset.mode; invalidate(); afterChange(); openStatusMenu(r, c, x, y); return; }
+      var pn = e.target.closest('[data-pin]');
+      if (pn) {
+        pushUndo(); var s2 = ensure(); s2.pinned = s2.pinned || [];
+        var k = pn.dataset.pin, i = s2.pinned.indexOf(k);
+        if (i >= 0) s2.pinned.splice(i, 1); else s2.pinned.push(k);
+        if (s2.mode === 'auto') s2.mode = 'mixed';   // pin แรก = เปลี่ยนเป็น mixed อัตโนมัติ
+        invalidate(); afterChange(); openStatusMenu(r, c, x, y); return;
+      }
+    };
+  }
+  // ---------- ขั้น5: Side panel รายละเอียดสินค้า (เปิดซ้าย/ขวาตามพื้นที่ · ไม่ทับแถว · ไม่หลุดเฟรม) ----------
+  var detailEl = null;
+  function openDetailPanel(r, anchorEl) {
+    var code = rowCode(r); if (!code || !window.DBX) return;
+    if (!detailEl) { detailEl = document.createElement('div'); detailEl.className = 'sg-detail'; document.body.appendChild(detailEl); }
+    detailEl.style.display = 'flex';
+    detailEl.innerHTML = '<div class="dp-head">📦 รายละเอียดสินค้า<span class="pk-x">✕</span></div><div class="dp-body"><div class="dp-loading">กำลังโหลดจากฐานข้อมูล…</div></div>';
+    positionDetail(anchorEl);
+    var closeDP = function () { detailEl.style.display = 'none'; if (window.PopupStack) PopupStack.remove(detailEl); };
+    detailEl.querySelector('.pk-x').onclick = closeDP;
+    if (window.PopupStack) PopupStack.push(detailEl, closeDP);
+    makeDraggable(detailEl, '.dp-head');
+    window.DBX.getClean(code).then(function (p) {
+      if (!p) { detailEl.querySelector('.dp-body').innerHTML = '<div class="dp-loading">⚠️ ไม่พบสินค้า "' + esc(code) + '" ใน DB</div>'; return; }
+      var icons = window.DBX.computeStatus(p, 8).map(function (d) { return '<span class="dp-stchip"' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + ' ' + esc(d.label) + '</span>'; }).join('');
+      var dotRows = (p.dotWeeks && p.dotWeeks.length)
+        ? p.dotWeeks.map(function (d) { return '<tr><td>' + esc(d.dot) + '</td><td>' + esc(d.week) + '</td><td class="dp-num">' + (typeof d.qty === 'number' ? d.qty.toLocaleString('en-US') : esc(d.qty)) + '</td></tr>'; }).join('')
+        : '<tr><td colspan="3" class="dp-dim">— ไม่มีข้อมูล DOT —</td></tr>';
+      var imgN = (p.images && p.images.length) || 0;
+      var ss = p._setSize || { check: true, size: 4 };
+      detailEl.querySelector('.dp-body').innerHTML =
+        '<div class="dp-top"><div class="dp-code">' + esc(p.code13) + (p.status && p.status !== 'active' ? ' <span class="dp-inact">inactive</span>' : '') + '</div>' +
+        '<button class="dp-imgbtn"' + (imgN ? '' : ' disabled') + '>🖼️ ดูรูป' + (imgN ? ' (' + imgN + ')' : '') + '</button></div>' +
+        '<div class="dp-name">' + esc(p.name || '') + '</div>' +
+        (icons ? '<div class="dp-icons">' + icons + '</div>' : '') +
+        '<div class="dp-stats">' +
+          stat('จำนวน', (p.qtyOnHand != null ? p.qtyOnHand : '–')) +
+          stat('ค้างส่ง', (p.qtyReserved || 0), (p.qtyReserved > 0 ? 'warn' : '')) +
+          stat('สุทธิ', (p.qtyAvailable != null ? p.qtyAvailable : '–'), p.qtyAvailable <= 0 ? 'neg' : (ss.check && p.qtyAvailable < ss.size ? 'warn' : 'ok')) +
+        '</div>' +
+        '<div class="dp-dothead">DOT คงเหลือ <span class="dp-dim">(ปีผลิต · สัปดาห์ · จำนวน)</span></div>' +
+        '<table class="dp-dot"><tbody>' + dotRows + '</tbody></table>';
+      var ib = detailEl.querySelector('.dp-imgbtn');
+      if (ib && imgN) ib.onclick = function () { openImageGallery(p); };
+      positionDetail(anchorEl);
+    });
+    function stat(label, val, tone) { var s = (typeof val === 'number') ? val.toLocaleString('en-US') : String(val); return '<div class="dp-stat' + (tone ? ' dp-' + tone : '') + '"><span class="dp-lbl">' + label + '</span><span class="dp-val">' + esc(s) + '</span></div>'; }
+  }
+  // แกลเลอรีรูปสินค้า — ป๊อปอัปซ้อนเหนือ panel เดิม (เข้า PopupStack · Esc ปิดทีละชั้น)
+  var galleryEl = null;
+  function openImageGallery(p) {
+    if (!galleryEl) { galleryEl = document.createElement('div'); galleryEl.className = 'sg-detail sg-gallery'; document.body.appendChild(galleryEl); }
+    var imgs = p.images || [];
+    var tiles = imgs.map(function (im, i) {
+      return '<div class="gl-tile' + (im.url ? '' : ' gl-empty') + '" data-i="' + i + '">' +
+        (im.url ? '<img src="' + esc(im.url) + '" alt="" onerror="this.parentNode.classList.add(\'gl-empty\');this.remove();">' : 'รูป ' + (i + 1)) +
+        '</div>';
+    }).join('');
+    galleryEl.innerHTML = '<div class="dp-head gl-head">🖼️ รูปสินค้า · ' + esc(p.code13) + ' <span class="gl-count">(' + imgs.length + ' รูป)</span><span class="pk-x">✕</span></div>' +
+      '<div class="gl-body">' + tiles + '</div>';
+    galleryEl.style.display = 'flex';
+    // วางกึ่งกลางเหนือ panel เดิม
+    var w = 360, dh = detailEl ? detailEl.getBoundingClientRect() : null;
+    galleryEl.style.width = w + 'px';
+    var L = dh ? Math.max(6, Math.min(dh.left - 20, window.innerWidth - w - 6)) : (window.innerWidth - w) / 2;
+    galleryEl.style.left = L + 'px';
+    galleryEl.style.top = (dh ? Math.max(6, dh.top - 12) : 60) + 'px';
+    galleryEl.style.transform = 'none';
+    makeDraggable(galleryEl, '.gl-head');
+    clampPopup(galleryEl);
+    var closeG = function () { galleryEl.style.display = 'none'; if (window.PopupStack) PopupStack.remove(galleryEl); };
+    if (window.PopupStack) PopupStack.push(galleryEl, closeG);
+    galleryEl.querySelector('.pk-x').onclick = closeG;
+    galleryEl.querySelector('.gl-body').onclick = function (e) {
+      var t = e.target.closest('.gl-tile'); if (!t) return;
+      openImageViewer(p, +t.dataset.i);
+    };
+  }
+  // Lightbox: ขยายรูปเดี่ยว (ชั้นบนสุด) + ปุ่มเซฟลงเครื่อง · เลื่อนรูปก่อน/ถัดไป
+  var viewerEl = null;
+  function openImageViewer(p, idx) {
+    var imgs = p.images || []; if (!imgs.length) return;
+    idx = Math.max(0, Math.min(idx, imgs.length - 1));
+    if (!viewerEl) { viewerEl = document.createElement('div'); viewerEl.className = 'sg-imgviewer'; document.body.appendChild(viewerEl); }
+    function render() {
+      var im = imgs[idx] || {};
+      var fname = (p.code13 || 'image') + '_' + (idx + 1) + '.jpg';
+      viewerEl.innerHTML =
+        '<div class="iv-head"><span class="iv-title">รูป ' + (idx + 1) + ' / ' + imgs.length + ' · ' + esc(p.code13) + '</span>' +
+        '<span class="iv-x">✕</span></div>' +
+        '<div class="iv-stage">' +
+          (imgs.length > 1 ? '<button class="iv-nav iv-prev" title="ก่อนหน้า">‹</button>' : '') +
+          (im.url ? '<img class="iv-img" src="' + esc(im.url) + '" alt="" data-fname="' + esc(fname) + '">' : '<div class="iv-empty">ยังไม่มีรูป (รอ URL จาก DB)</div>') +
+          (imgs.length > 1 ? '<button class="iv-nav iv-next" title="ถัดไป">›</button>' : '') +
+        '</div>' +
+        '<div class="iv-foot"><button class="btn primary iv-save"' + (im.url ? '' : ' disabled') + '>⬇️ เซฟรูปลงเครื่อง</button></div>';
+      var prev = viewerEl.querySelector('.iv-prev'), next = viewerEl.querySelector('.iv-next');
+      if (prev) prev.onclick = function () { idx = (idx - 1 + imgs.length) % imgs.length; render(); };
+      if (next) next.onclick = function () { idx = (idx + 1) % imgs.length; render(); };
+      viewerEl.querySelector('.iv-x').onclick = closeV;
+      var sv = viewerEl.querySelector('.iv-save');
+      if (sv && im.url) sv.onclick = function () { saveImage(im.url, fname); };
+    }
+    function closeV() { viewerEl.style.display = 'none'; document.removeEventListener('keydown', onKey, true); if (window.PopupStack) PopupStack.remove(viewerEl); }
+    function onKey(e) {
+      if (viewerEl.style.display === 'none' || imgs.length < 2) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); idx = (idx - 1 + imgs.length) % imgs.length; render(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); idx = (idx + 1) % imgs.length; render(); }
+    }
+    viewerEl.style.display = 'flex';
+    render();
+    clampPopup(viewerEl);
+    document.addEventListener('keydown', onKey, true);
+    if (window.PopupStack) PopupStack.push(viewerEl, closeV);
+  }
+  function saveImage(url, fname) {
+    // พยายามดึงเป็น blob เพื่อบังคับดาวน์โหลด · ถ้าข้าม origin ไม่ได้ → เปิดแท็บใหม่ให้เซฟเอง
+    fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+      var a = document.createElement('a'), u = URL.createObjectURL(b);
+      a.href = u; a.download = fname || 'image.jpg'; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 1000);
+    }).catch(function () {
+      var a = document.createElement('a'); a.href = url; a.download = fname || 'image.jpg'; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+  }
+  function positionDetail(anchorEl) {
+    if (!detailEl || !anchorEl) return;
+    detailEl.style.transform = 'none';
+    var w = detailEl.offsetWidth || 300, h = detailEl.offsetHeight || 320;
+    var a = anchorEl.getBoundingClientRect();
+    var spaceRight = window.innerWidth - a.right, spaceLeft = a.left;
+    var L = (spaceRight >= w + 12) ? a.right + 8 : (spaceLeft >= w + 12 ? a.left - w - 8 : Math.max(6, window.innerWidth - w - 6));
+    var T = Math.min(Math.max(6, a.top), window.innerHeight - h - 6);
+    detailEl.style.left = Math.max(6, L) + 'px';
+    detailEl.style.top = T + 'px';
+  }
+  // ค่าที่ดึงจาก DB สำหรับช่องนี้ (cell-link ชนะ row-link+columnMap) — undefined = ไม่ผูก/ยังไม่แคช
+  function dbCellValue(r, c) {
+    if (!window.DBX) return undefined;
+    var cl = doc.cellLinks && doc.cellLinks[r] && doc.cellLinks[r][c];
+    if (cl && isCode13(cl.code) && cl.field) { var p = dbCache[cl.code]; return p ? dbFieldVal(p, cl.field) : (dbTried[cl.code] ? '' : '\u2026'); }
+    var cm = doc.columnMap && doc.columnMap[c];
+    var code = rowCode(r);
+    if (cm && cm.field && code) { var p2 = dbCache[code]; return p2 ? dbFieldVal(p2, cm.field) : (dbTried[code] ? '' : '\u2026'); }
+    return undefined;
+  }
+  function dbFieldVal(p, field) { var v = p[field]; return (v == null) ? '' : v; }
+  // ช่องนี้ผูก DB อยู่ไหม (มีไว้ล็อก read-only) · 'read'|'write'|null
+  function dbCellMode(r, c) {
+    if (!window.DBX) return null;
+    var cl = doc.cellLinks && doc.cellLinks[r] && doc.cellLinks[r][c];
+    if (cl && isCode13(cl.code) && cl.field) return window.DBX.isWritable(cl.field) ? 'write' : 'read';
+    var cm = doc.columnMap && doc.columnMap[c];
+    if (cm && cm.field && rowCode(r)) return cm.mode || (window.DBX.isWritable(cm.field) ? 'write' : 'read');
+    return null;
+  }
+  // เติมแคชจาก DBX ตามรหัสที่ผูกในชีต แล้ว callback ให้ re-render
+  var dbCacheBusy = false;
+  var dbTried = {};   // code ที่พยายามดึงแล้ว (กันลูป re-render เมื่อรหัสเก่า/หาไม่เจอใน DB)
+  var dbRerenderPending = false;
+  function refreshDbCache(cb) {
+    if (!window.DBX) { if (cb) cb(false); return; }
+    if (dbCacheBusy) { if (cb) cb(false); return; }
+    var codes = {};
+    Object.keys(doc.rowLinks || {}).forEach(function (r) { var v = doc.rowLinks[r]; if (isCode13(v)) codes[v] = 1; });
+    Object.keys(doc.cellLinks || {}).forEach(function (r) { var row = doc.cellLinks[r]; Object.keys(row).forEach(function (c) { if (row[c] && isCode13(row[c].code)) codes[row[c].code] = 1; }); });
+    var missing = Object.keys(codes).filter(function (cd) { return !dbCache[cd] && !dbTried[cd]; });
+    if (!missing.length) { if (cb) cb(false); return; }
+    dbCacheBusy = true;
+    missing.forEach(function (cd) { dbTried[cd] = 1; });   // ทำเครื่องหมายว่าพยายามแล้ว (สำเร็จหรือไม่ก็ไม่วนซ้ำ)
+    window.DBX.batchClean(missing).then(function (arr) {
+      var got = false;
+      arr.forEach(function (p) { if (p && p.code13) { dbCache[p.code13] = p; got = true; } });
+      dbCacheBusy = false; if (cb) cb(got);
+    }).catch(function () { dbCacheBusy = false; if (cb) cb(false); });
+  }
+  // เรียกหลัง render: เติมแคช DB แล้ว re-render รอบเดียว (กันลูปด้วย setTimeout + flag)
+  function scheduleDbFill() {
+    if (dbRerenderPending || dbCacheBusy) return;
+    refreshDbCache(function (changed) {
+      if (!changed) return;
+      dbRerenderPending = true;
+      setTimeout(function () { dbRerenderPending = false; invalidate(); render(); }, 0);
+    });
+  }
   function valueOf(r, c, seen) {
     var k = key(r, c);
     if (!cache) cache = {};
     if (k in cache) return cache[k];
+    // ค่าที่ผูกจาก DB (read fields) ชนะค่าที่เก็บในเซลล์ · ราคา (write) ใช้ค่าในเซลล์เป็นหลัก (แก้ได้)
+    var dbm = dbCellMode(r, c);
+    if (dbm === 'read') { var dv = dbCellValue(r, c); if (dv !== undefined) { cache[k] = dv; return dv; } }
     var cell = doc.cells[k];
     var out = '';
     if (cell) {
@@ -245,16 +526,26 @@
     function firstVisIn(r0, rs) { for (var r = r0; r < r0 + rs && r < doc.nRows; r++) if (rowVis[r]) return r; return -1; }
     function visInSpan(r0, rs) { var n = 0; for (var r = r0; r < r0 + rs && r < doc.nRows; r++) if (rowVis[r]) n++; return Math.max(1, n); }
     function visColsInSpan(c0, cs) { var n = 0; for (var c = c0; c < c0 + cs && c < doc.nCols; c++) if (!colHidden(c)) n++; return Math.max(1, n); }
-    var html = '<table class="sg" style="font-size:' + (10 * view.zoom) + 'px"><colgroup><col style="width:' + Math.round(30 * view.zoom) + 'px">';
-    for (var c = 0; c < doc.nCols; c++) if (!colHidden(c)) html += '<col style="width:' + colW(c) + 'px">';
-    html += '</colgroup>';
+    var gutW = Math.round(30 * view.zoom);
+    var totalW = gutW, colsHtml = '';
+    for (var c = 0; c < doc.nCols; c++) if (!colHidden(c)) { var cw = colW(c); colsHtml += '<col style="width:' + cw + 'px">'; totalW += cw; }
+    var html = '<table class="sg" style="font-size:' + (10 * view.zoom) + 'px;width:' + totalW + 'px"><colgroup><col style="width:' + gutW + 'px">' + colsHtml + '</colgroup>';
     // A-B-C header
     html += '<tr class="sg-abc" style="height:' + Math.round(18 * view.zoom) + 'px"><th class="sg-corner" title="เลือกทั้งหมด"></th>';
     for (var c2 = 0; c2 < doc.nCols; c2++) {
       if (colHidden(c2)) continue;
       var lockC = doc.adminCols && doc.adminCols[c2];
-      html += '<th class="sg-h' + (lockC && isAdmin ? ' lockh' : '') + '" data-hc="' + c2 + '" title="คอลัมน์ ' + XL2.colName(c2) + (lockC ? ' · 🔒เฉพาะแอดมิน' : '') + '">' + XL2.colName(c2) +
-        (isAdmin ? '<span class="sg-rzc" data-rz="' + c2 + '"></span>' : '') + '</th>';
+      var cmB = isAdmin && doc.columnMap && doc.columnMap[c2];
+      var isStatusCol = isAdmin && doc.statusCol === c2;
+      var hicons = [];
+      if (isStatusCol) hicons.push(['📊', 'คอลัมน์สถานะ', 'c-tr']);
+      else if (cmB) hicons.push([(cmB.mode === 'write' ? '✏️' : '🔗'), 'ผูก DB: ' + (window.DBX ? window.DBX.fieldLabel(cmB.field) : cmB.field) + (cmB.mode === 'write' ? ' · เขียนได้' : ' · อ่านอย่างเดียว'), '']);
+      // ไอคอนทั่วไปใช้ 3 มุม: ขวาบน → ซ้ายบน → ซ้ายล่าง (ห้ามใช้ขวาล่าง)
+      var HC3 = ['c-tr', 'c-tl', 'c-bl'], gi = 0;
+      var marks = hicons.map(function (o) { return '<span class="sg-cic ' + (o[2] || HC3[gi++]) + '" title="' + esc(o[1]) + '">' + o[0] + '</span>'; }).join('');
+      if (lockC && isAdmin) marks += '<span class="sg-cic c-br sg-lockic" title="' + esc(lockGlyph() + ' ' + lockDesc()) + '">' + lockGlyph() + '</span>';   // แม่กุญแจ มุมขวาล่าง
+      html += '<th class="sg-h' + (lockC && isAdmin ? ' lockh' : '') + (cmB || isStatusCol ? ' cmbound' : '') + '" data-hc="' + c2 + '">' + '<span class="sg-hname">' + XL2.colName(c2) + '</span>' + marks +
+        (isAdmin ? '<span class="sg-rzc" data-rz="' + c2 + '"></span>' + (c2 > 0 ? '<span class="sg-rzc sg-rzc-l" data-rz="' + (c2 - 1) + '"></span>' : '') : '') + '</th>';
     }
     html += '</tr>';
     if (!isAdmin) html += '<tr><td class="sg-uview" colspan="999">👁️ มุมมองผู้ใช้ — อ่านอย่างเดียว · แถว/คอลัมน์ 🔒 ถูกซ่อน</td></tr>';
@@ -262,8 +553,11 @@
     for (var r = 0; r < doc.nRows; r++) {
       if (!rowVis[r]) continue;
       var lockR = doc.adminRows && doc.adminRows[r];
+      var lnkG = rowCode(r);
+      var lnkStatus = lnkG ? rowLinkStatus(r) : null;
+      var lnkBad = (lnkStatus === 'missing' || lnkStatus === 'inactive');   // ลิงก์ค้าง/inactive
       html += '<tr data-row="' + r + '" style="height:' + rowH(r) + 'px">';
-      html += '<td class="sg-g' + (lockR && isAdmin ? ' lockg' : '') + '" data-gr="' + r + '" title="แถว ' + (r + 1) + (lockR ? ' · 🔒เฉพาะแอดมิน' : '') + (isAdmin && doc.changes && doc.changes[r] ? ' · ✏️ มีการปรับราคารอบนี้' : '') + '">' + (r + 1) + (isAdmin && doc.changes && doc.changes[r] ? '<span class="gchg-corner"></span>' : '') + (isAdmin ? '<span class="sg-rzr" data-rzr="' + r + '"></span>' : '') + '</td>';
+      html += '<td class="sg-g' + (lockR && isAdmin ? ' lockg' : '') + (lnkG ? ' glinked' : '') + (lnkBad ? ' glinked-bad' : '') + '" data-gr="' + r + '" title="แถว ' + (r + 1) + (lockR ? ' · 🔒เฉพาะแอดมิน' : '') + (isAdmin && doc.changes && doc.changes[r] ? ' · ✏️ มีการปรับราคารอบนี้' : '') + '">' + (r + 1) + (lnkG ? '<span class="glink-corner"></span>' : '') + (isAdmin && doc.changes && doc.changes[r] ? '<span class="gchg-corner"></span>' : '') + (isAdmin ? '<span class="sg-rzr" data-rzr="' + r + '"></span>' + (r > 0 ? '<span class="sg-rzr sg-rzr-t" data-rzr="' + (r - 1) + '"></span>' : '') : '') + '</td>';
       for (var c3 = 0; c3 < doc.nCols; c3++) {
         if (colHidden(c3)) continue;
         var k = key(r, c3);
@@ -297,6 +591,8 @@
     updateBars();
     // เส้นขอบที่ผู้ใช้ตีไว้ วาดด้วย SVG overlay (คมชัด ต่อเนื่อง ตรงแบบ Excel)
     if (window.BorderOverlay) window.BorderOverlay.draw(rootEl, doc, view);
+    // ดึงค่าจาก DB (ชั้นกลาง DBX) สำหรับคอลัมน์/ช่องที่ผูกไว้ — เติมแคชแล้ว re-render รอบเดียว
+    scheduleDbFill();
   }
 
   // ---------- โหมดมืด: สีตัวอักษรที่มืดจนกลืนกับพื้น → ปรับเป็นสีคอนทราสต์ชั่วคราว (เฉพาะตอนแสดงผล ไม่แตะข้อมูลจริง)
@@ -330,6 +626,13 @@
     if (s.mn) st += "font-family:Consolas,'Courier New',monospace;letter-spacing:.5px;";
     // เส้นขอบ (s.bd) ไม่วาดเป็น CSS border บน td อีกต่อไป — ใช้ SVG overlay แทน (ดู border-overlay.js)
     // เพื่อเลี่ยงปัญหา border-collapse: เส้นสีชนเส้นตารางเทา / เส้นหนาเยื้องข้างเดียว / เส้นประไม่ต่อกัน
+    // ซ่อนเส้นตารางเทาใต้ขอบที่ตีสีไว้ → เหลือเส้นเดียว (กันดูหนาซ้อนกับเส้นเทา)
+    if (s.bd) {
+      if (s.bd.t) st += 'border-top-color:transparent;';
+      if (s.bd.b) st += 'border-bottom-color:transparent;';
+      if (s.bd.l) st += 'border-left-color:transparent;';
+      if (s.bd.r) st += 'border-right-color:transparent;';
+    }
     st += 'text-align:' + (s.al || (XL2.isNumeric(valueOf(r, c)) ? 'right' : 'left')) + ';';
     // สีตามเงื่อนไข (Margin): บวกเขียว / ลบแดง — ตั้งค่าสีได้ที่ doc.condColors
     if (s.cond === 'pn') {
@@ -345,11 +648,17 @@
     if (adm) cls += ' adm';
     if (cell && cell.f) cls += ' hasf';
     var disp = displayOf(r, c);
-    if (view.secret && (doc.adminCols && doc.adminCols[c]) && disp !== '' && !(cell && cell.f && /COGS|DEALER/i.test(cell.f))) disp = '•••';
-    var linked = (c === 3 && doc.rowLinks && doc.rowLinks[r]);
-    if (linked) cls += ' dblink';
+    if (view.secret) {
+      var ds = String(disp);
+      // ซ่อนตัวเลขล้วน (ไม่มีตัวอักษรผสม) ทั้งชีต → *** · ส่วนรหัส/ตัวอักษรยังโชว์
+      if (ds !== '' && /[0-9]/.test(ds) && !/[A-Za-z\u0E00-\u0E7F]/.test(ds)) disp = '***';
+      else if ((doc.adminCols && doc.adminCols[c]) && ds !== '' && !(cell && cell.f && /COGS|DEALER/i.test(cell.f))) disp = '•••';
+    }
+    var linked = (c === 3 && rowCode(r));
+    // ไม่ใส่ไอคอน/มาร์กในเซลล์ — สถานะลิงก์แสดงที่แถบหัวแถวเท่านั้น (ตามที่ผู้ใช้ต้องการ)
     // สัญลักษณ์การปรับราคา
     var suffix = '', chg = doc.changes && doc.changes[r] && doc.changes[r][c];
+    if (chg && chgExpired(chg)) chg = null;   // สัญลักษณ์ปรับราคา มีอายุ 7 วันจากเวลาอัปเดต แล้วหายไป
     if (chg && isAdmin) {
       // มุมเขียว = ปรับขึ้น · มุมส้ม = ปรับลง · เท่าเดิม = ไม่แสดง (ยังไม่ถือว่าเปลี่ยน)
       var aCur = valueOf(r, c);
@@ -371,9 +680,18 @@
     var rsv = (effRs != null) ? effRs : (mg ? mg.rs : 0);
     var csv = (effCs != null) ? effCs : (mg ? mg.cs : 0);
     var span = (rsv > 1 || csv > 1 || mg) ? ' rowspan="' + Math.max(1, rsv) + '" colspan="' + Math.max(1, csv) + '"' : '';
+    // มาร์กมุมบนซ้าย: ช่องที่ลิงก์เฉพาะช่อง (cell-link 3C)
+    var cl3c = doc.cellLinks && doc.cellLinks[r] && doc.cellLinks[r][c];
+    var cellMark = cl3c ? '<span class="celllink-corner"></span>' : '';
+    if (cl3c) cls += ' celllinked';
+    // คอลัมน์สถานะ: แสดงจุดสี/ไอคอนแทนค่า (เฉพาะแถวที่ลิงก์ DB)
+    if (doc.statusCol === c && window.DBX && rowCode(r)) {
+      var stInner = statusCellInner(r);
+      return '<td class="' + cls + ' sg-statuscell" data-r="' + r + '" data-c="' + c + '"' + span + (st ? ' style="' + st + '"' : '') + ' title="คลิกดูรายละเอียด · คลิกขวาตั้ง auto/manual">' + stInner + '</td>';
+    }
     return '<td class="' + cls + '" data-r="' + r + '" data-c="' + c + '"' + span + (st ? ' style="' + st + '"' : '') +
-      (linked ? ' title="🔗 ' + esc((XL2.dbInfo(doc.rowLinks[r]).code ? XL2.dbInfo(doc.rowLinks[r]).code + ' · ' : '') + XL2.dbInfo(doc.rowLinks[r]).name) + '"' : (chg && isAdmin && cls.indexOf(' chg') >= 0 ? ' title="✏️ ปรับรอบนี้ · เดิม: ' + esc(XL2.fmtNum(nOr(chg.old, 0))) + (cls.indexOf('chg-up') >= 0 ? ' (ขึ้น)' : ' (ลง)') + '"' : '')) +
-      '>' + esc(disp).replace(/\n/g, '<br>') + suffix + '</td>';
+      (cl3c ? ' title="🗄️ ลิงก์เฉพาะช่อง: ' + esc(cl3c.code) + ' · ' + esc(window.DBX ? window.DBX.fieldLabel(cl3c.field) : cl3c.field) + '"' : (linked ? ' title="🔗 ' + esc(rowLinkLabel(r)) + '"' : (chg && isAdmin && cls.indexOf(' chg') >= 0 ? ' title="✏️ ปรับรอบนี้ · เดิม: ' + esc(XL2.fmtNum(nOr(chg.old, 0))) + (cls.indexOf('chg-up') >= 0 ? ' (ขึ้น)' : ' (ลง)') + '"' : ''))) +
+      '>' + cellMark + esc(disp).replace(/\n/g, '<br>') + suffix + '</td>';
   }
 
   // ---------- selection ----------
@@ -414,12 +732,13 @@
     box.style.height = (maxB - minT) + 'px';
   }
 
-  function setActive(r, c, keepAnchor) {
+  function setActive(r, c, keepAnchor, noScroll) {
     r = Math.max(0, Math.min(doc.nRows - 1, r));
     c = Math.max(0, Math.min(doc.nCols - 1, c));
     sel.r = r; sel.c = c;
     if (!keepAnchor) { sel.ar = r; sel.ac = c; }
     paintSel();
+    if (noScroll) return;   // คลิกเลือกช่องที่เห็นอยู่แล้ว → ไม่ต้องเลื่อนจอ (กันตารางขยับ)
     var el = cellEl(r, c);
     if (el) {
       var rect = el.getBoundingClientRect(), pr = rootEl.getBoundingClientRect();
@@ -470,6 +789,14 @@
     if (!s || s === 'ทันที') return new Date(0);
     var d = new Date(String(s).replace(' ', 'T'));
     return isNaN(d.getTime()) ? new Date(0) : d;
+  }
+  // สัญลักษณ์ปรับราคา มีอายุ 7 วัน นับจากเวลาที่มีผล (เฉพาะที่ส่งแล้ว) — ครบแล้วหาย
+  var CHG_TTL = 7 * 86400 * 1000;
+  function chgExpired(chg) {
+    if (!chg || !chg.sent) return false;
+    var base = chg.effectiveAt ? parseEff(chg.effectiveAt).getTime() : (chg.ts || 0);
+    if (!base) return false;
+    return (Date.now() - base) > CHG_TTL;
   }
   // ถ้าปรับกลับมาเท่าราคาเดิม (และยังไม่เผยแพร่) → ลบเครื่องหมายทิ้ง ถือว่าไม่มีการเปลี่ยนแปลง
   function pruneChange(r, c) {
@@ -938,8 +1265,8 @@
   }
 
   // ---------- borders (ตีเส้นแบบ Excel · เลือกสี/ลายเส้นได้) ----------
-  var bdOpts = { style: 'solid', color: '000000' };
-  function setBorderOpts(o) { if (o.style) bdOpts.style = o.style; if (o.color) bdOpts.color = o.color; }
+  var bdOpts = { style: 'solid', color: '000000', w: 1 };
+  function setBorderOpts(o) { if (o.style) bdOpts.style = o.style; if (o.color) bdOpts.color = o.color; if (o.w != null) bdOpts.w = o.w; }
   function bdCss(v) {
     if (v == null) return null;
     if (typeof v === 'number' || /^\d+$/.test(String(v))) return (String(v) === '2' ? '2px' : '1px') + ' solid #000';
@@ -952,26 +1279,36 @@
     pushUndo();
     var R = range();
     function setB(r, c, side, val) {
-      var cell = ensureCell(r, c); cell.s = cell.s || {};
-      var bd = cell.s.bd = cell.s.bd || {};
-      if (val) bd[side] = val; else delete bd[side];
-      if (!Object.keys(bd).length) delete cell.s.bd;
+      function put(rr, cc, sd, v) {
+        if (rr < 0 || cc < 0) return;
+        var cell = ensureCell(rr, cc); cell.s = cell.s || {};
+        var bd = cell.s.bd = cell.s.bd || {};
+        if (v) bd[sd] = v; else delete bd[sd];
+        if (!Object.keys(bd).length) delete cell.s.bd;
+      }
+      put(r, c, side, val);
+      // ซิงค์ "ขอบที่แชร์" กับช่องข้างเคียงให้ตรงกัน — โมเดลแบบ Excel: 1 ขอบ = 1 เส้น
+      // (กันเส้นหนาเดิมของช่องข้างนอกพื้นที่เลือกมาเหลื่อมกับเส้นที่เพิ่งตี → ในกับนอกหนาเท่ากัน)
+      if (side === 't') put(r - 1, c, 'b', val);
+      else if (side === 'b') put(r + 1, c, 't', val);
+      else if (side === 'l') put(r, c - 1, 'r', val);
+      else if (side === 'r') put(r, c + 1, 'l', val);
     }
-    var thick = /thick/.test(mode) ? 2 : 1;
-    var val1 = '1|' + bdOpts.style + '|' + bdOpts.color;
+    var baseW = bdOpts.w || 1;
+    var thick = /thick/.test(mode) ? (baseW + 1) : baseW;
+    var val1 = baseW + '|' + bdOpts.style + '|' + bdOpts.color;
     var valT = thick + '|' + bdOpts.style + '|' + bdOpts.color;
     for (var r = R.r1; r <= R.r2; r++) for (var c = R.c1; c <= R.c2; c++) {
-      if (mode === 'none') { var cell = cellAt(r, c); if (cell && cell.s) delete cell.s.bd; continue; }
+      if (mode === 'none' || mode === 'erase-all') {
+        // ล้างทุกเส้นรอบช่อง + ขอบที่แชร์กับเพื่อนบ้านด้วย (กันขอบนอกค้าง) ผ่าน setB(null)
+        setB(r, c, 't', null); setB(r, c, 'b', null); setB(r, c, 'l', null); setB(r, c, 'r', null);
+        continue;
+      }
       if (mode.indexOf('erase') === 0) {
-        var ce = cellAt(r, c); if (ce && ce.s && ce.s.bd) {
-          if (mode === 'erase-all') { delete ce.s.bd; }
-          else {
-            if (/bottom/.test(mode) && r === R.r2) delete ce.s.bd.b;
-            if (/top/.test(mode) && r === R.r1) delete ce.s.bd.t;
-            if (/left/.test(mode) && c === R.c1) delete ce.s.bd.l;
-            if (/right/.test(mode) && c === R.c2) delete ce.s.bd.r;
-          }
-        }
+        if (/bottom/.test(mode) && r === R.r2) setB(r, c, 'b', null);
+        if (/top/.test(mode) && r === R.r1) setB(r, c, 't', null);
+        if (/left/.test(mode) && c === R.c1) setB(r, c, 'l', null);
+        if (/right/.test(mode) && c === R.c2) setB(r, c, 'r', null);
         continue;
       }
       if (mode === 'all') { setB(r, c, 't', val1); setB(r, c, 'b', val1); setB(r, c, 'l', val1); setB(r, c, 'r', val1); continue; }
@@ -1022,6 +1359,112 @@
     afterChange();
     toast('กำหนดรูปแบบ: ' + (t === 'num' ? 'ตัวเลข' : t === 'text' ? 'ข้อความ' : 'อัตโนมัติ'));
   }
+  // ---------- 3A: ผูกคอลัมน์กับฟิลด์ DB (column binding) ----------
+  // เทมเพลตเริ่มต้น (แก้ได้) — index คอลัมน์ → ฟิลด์ DBX
+  var COLMAP_TEMPLATE = { 6: 'costStandard', 7: 'salePrice1', 8: 'salePrice2', 9: 'salePrice3' };
+  function applyColMapTemplate() {
+    if (view.mode !== 'admin' || !window.DBX) return;
+    pushUndo();
+    doc.columnMap = doc.columnMap || {};
+    Object.keys(COLMAP_TEMPLATE).forEach(function (c) {
+      var field = COLMAP_TEMPLATE[c];
+      doc.columnMap[c] = { field: field, mode: window.DBX.isWritable(field) ? 'write' : 'read' };
+    });
+    invalidate(); afterChange(); toast('ใช้เทมเพลตผูกคอลัมน์แล้ว (แก้ไขได้)');
+  }
+  var colBindEl = null;
+  function openColBind(col) {
+    if (view.mode !== 'admin' || !window.DBX) return;
+    if (!colBindEl) { colBindEl = document.createElement('div'); colBindEl.className = 'sg-pick sg-colbind'; document.body.appendChild(colBindEl); }
+    var cur = (doc.columnMap && doc.columnMap[col]) || null;
+    var isStatus = doc.statusCol === col;
+    var groups = window.DBX.allGroups();
+    var curGroup = null;
+    if (cur) { var cf = window.DBX.allFields().find(function (x) { return x.key === cur.field; }); curGroup = cf ? cf.group : null; }
+    // รายการหมวด (กระชับ) — แต่ละหมวดมี flyout รายละเอียดออกข้าง
+    var cats = '<div class="cb-cat cb-special' + (isStatus ? ' on' : '') + '" data-special="status"><span class="cb-ic">📊</span><span class="cb-cat-name">คอลัมน์สถานะ (จุดสี/ไอคอน)</span></div>';
+    cats += groups.map(function (g) {
+      var fields = window.DBX.fieldsInGroup(g, true);
+      if (!fields.length) return '';   // ซ่อนหมวดที่ไม่มีฟิลด์เปิดใช้งาน
+      var hasCur = curGroup === g;
+      return '<div class="cb-cat' + (hasCur ? ' on' : '') + '" data-group="' + esc(g) + '">' +
+        '<span class="cb-cat-name">' + esc(g) + '</span>' +
+        '<span class="cb-cat-meta">' + fields.length + ' ฟิลด์ ▸</span></div>';
+    }).join('');
+    colBindEl.innerHTML = '<div class="pk-head">🔗 ผูกคอลัมน์ ' + XL2.colName(col) + ' กับฟิลด์ DB<span class="pk-x">✕</span></div>' +
+      '<div class="cb-cur">' + (cur ? 'ผูกอยู่: <b>' + esc(window.DBX.fieldLabel(cur.field)) + '</b> · ' + (cur.mode === 'write' ? 'เขียนได้ (ราคา)' : 'อ่านอย่างเดียว') : (isStatus ? 'เป็น <b>คอลัมน์สถานะ</b>' : 'ยังไม่ผูก')) + '</div>' +
+      '<div class="cb-cats">' + cats + '</div>' +
+      '<div class="cb-foot"><button class="btn" data-tpl>📋 ใช้เทมเพลต</button><button class="btn" data-manage>⚙️ จัดการฟิลด์/หมวด</button>' + (cur || isStatus ? '<button class="btn" data-unbind>ยกเลิก</button>' : '') + '</div>';
+    var r = rootEl.querySelector('.sg-h[data-hc="' + col + '"]');
+    var rc = r ? r.getBoundingClientRect() : { left: 200, bottom: 120 };
+    colBindEl.style.display = 'block';
+    colBindEl.style.left = Math.min(rc.left, window.innerWidth - colBindEl.offsetWidth - 10) + 'px';
+    colBindEl.style.top = Math.min(rc.bottom + 4, window.innerHeight - colBindEl.offsetHeight - 10) + 'px';
+    makeDraggable(colBindEl, '.pk-head'); clampPopup(colBindEl);
+    var closeCB = function () { colBindEl.style.display = 'none'; closeCbFlyout(); if (window.PopupStack) PopupStack.remove(colBindEl); };
+    if (window.PopupStack) PopupStack.push(colBindEl, closeCB);
+    colBindEl.querySelector('.pk-x').onclick = closeCB;
+    colBindEl.querySelector('[data-tpl]').onclick = function () { applyColMapTemplate(); closeCB(); };
+    colBindEl.querySelector('[data-manage]').onclick = function () { closeCB(); if (window.openDbFieldManager) window.openDbFieldManager(); };
+    var ub = colBindEl.querySelector('[data-unbind]'); if (ub) ub.onclick = function () { if (isStatus) toggleStatusCol(col); else bindColumn(col, null); closeCB(); };
+    // คลิก/hover หมวด → flyout รายละเอียดฟิลด์ออกข้าง
+    var cs = colBindEl.querySelector('.cb-cats');
+    cs.onclick = function (e) {
+      var sp = e.target.closest('[data-special]');
+      if (sp) { toggleStatusCol(col); closeCB(); return; }
+      var cat = e.target.closest('.cb-cat[data-group]'); if (!cat) return;
+      openCbFlyout(col, cat.dataset.group, cat, cur, closeCB);
+    };
+    cs.onmouseover = function (e) {
+      var cat = e.target.closest('.cb-cat[data-group]'); if (!cat) return;
+      openCbFlyout(col, cat.dataset.group, cat, cur, closeCB);
+    };
+  }
+  var cbFlyoutEl = null;
+  function closeCbFlyout() { if (cbFlyoutEl) cbFlyoutEl.style.display = 'none'; }
+  function openCbFlyout(col, group, catEl, cur, closeCB) {
+    if (!cbFlyoutEl) { cbFlyoutEl = document.createElement('div'); cbFlyoutEl.className = 'sg-pick cb-flyout'; document.body.appendChild(cbFlyoutEl); }
+    var fields = window.DBX.fieldsInGroup(group, true);
+    var body = fields.map(function (f) {
+      var on = cur && cur.field === f.key;
+      return '<div class="cb-f' + (on ? ' on' : '') + (f.writable ? ' wr' : '') + '" data-field="' + esc(f.key) + '">' +
+        '<span class="cb-ic">' + (f.writable ? '✏️' : '🔒') + '</span>' + esc(f.label) + '</div>';
+    }).join('') || '<div class="cb-empty">หมวดนี้ยังไม่มีฟิลด์</div>';
+    cbFlyoutEl.innerHTML = '<div class="cb-fly-head">' + esc(group) + '</div><div class="cb-fly-body">' + body + '</div>';
+    // ไฮไลต์หมวดที่เลือก
+    colBindEl.querySelectorAll('.cb-cat.hi').forEach(function (x) { x.classList.remove('hi'); });
+    catEl.classList.add('hi');
+    cbFlyoutEl.style.display = 'block';
+    var cr = catEl.getBoundingClientRect(), pw = cbFlyoutEl.offsetWidth, ph = cbFlyoutEl.offsetHeight;
+    var left = cr.right + 4; if (left + pw > window.innerWidth - 6) left = cr.left - pw - 4;
+    cbFlyoutEl.style.left = Math.max(6, left) + 'px';
+    cbFlyoutEl.style.top = Math.min(cr.top, window.innerHeight - ph - 6) + 'px';
+    cbFlyoutEl.querySelector('.cb-fly-body').onclick = function (e) {
+      var f = e.target.closest('.cb-f'); if (!f || !f.dataset.field) return;
+      bindColumn(col, f.dataset.field); closeCB();
+    };
+  }
+  function toggleStatusCol(col) {
+    if (view.mode !== 'admin') return;
+    pushUndo();
+    if (doc.statusCol === col) { delete doc.statusCol; toast('ยกเลิกคอลัมน์สถานะ'); }
+    else {
+      doc.statusCol = col;
+      if (doc.columnMap && doc.columnMap[col]) delete doc.columnMap[col];   // คอลัมน์สถานะไม่ผูกฟิลด์ DB
+      toast('ตั้งคอลัมน์ ' + XL2.colName(col) + ' เป็นคอลัมน์สถานะ');
+    }
+    invalidate(); afterChange();
+  }
+  function bindColumn(col, field) {
+    if (view.mode !== 'admin') return;
+    pushUndo();
+    doc.columnMap = doc.columnMap || {};
+    if (!field) delete doc.columnMap[col];
+    else { doc.columnMap[col] = { field: field, mode: (window.DBX && window.DBX.isWritable(field)) ? 'write' : 'read' }; if (doc.statusCol === col) delete doc.statusCol; }   // คอลัมน์เดียว เลือกได้อย่างเดียว: ฟิลด์ หรือ สถานะ
+    invalidate(); afterChange();
+    toast(field ? ('ผูกคอลัมน์ ' + XL2.colName(col) + ' → ' + (window.DBX ? window.DBX.fieldLabel(field) : field)) : ('ยกเลิกผูกคอลัมน์ ' + XL2.colName(col)));
+  }
+
   function linkDB() {
     if (view.mode !== 'admin') return;
     var codes = XL2.dbKeys();
@@ -1037,50 +1480,154 @@
     toast('ลิงก์ฐานข้อมูล: ' + code + ' → ' + field);
   }
 
-  // ---------- row ↔ product link (ทั้งแถว = สินค้ารหัสเดียว) ----------
-  var pickEl = null;
-  function openPicker(onPick) {
-    if (!pickEl) {
-      pickEl = document.createElement('div');
-      pickEl.className = 'sg-pick';
-      document.body.appendChild(pickEl);
-    }
-    var items = XL2.dbList();
-    pickEl.innerHTML = '<div class="pk-head">🔗 เลือกสินค้าจาก DATABASE<span class="pk-x">✕</span></div>' +
-      '<input class="pk-q" placeholder="ค้นหารหัสสินค้า / ขนาด / ยี่ห้อ / รุ่น…" />' +
-      '<div class="pk-list"></div>' +
-      '<div class="pk-note">แถวที่ลิงก์แล้ว: DOT จะเช็คจากฐานข้อมูล · ราคาตั้ง/B/A/S ที่ตั้งจะถูกส่งกลับไปเป็นราคาขายช่อง 1/2/3/4</div>';
+  // ---------- row ↔ product link (ทั้งแถว = สินค้ารหัสเดียว) · ผ่านชั้นกลาง DBX (code13) ----------
+  var pickEl = null, pickSel = null;
+  // ---------- popup: ลากย้ายด้วยหัว + กันหลุดเฟรม ----------
+  function clampPopup(el) {
+    if (!el) return;
+    el.style.transform = 'none';
+    var r = el.getBoundingClientRect();
+    var maxL = Math.max(4, window.innerWidth - r.width - 4);
+    var maxT = Math.max(4, window.innerHeight - r.height - 4);
+    var L = Math.min(Math.max(4, r.left), maxL);
+    var T = Math.min(Math.max(4, r.top), maxT);
+    el.style.left = L + 'px'; el.style.top = T + 'px';
+  }
+  function makeDraggable(el, handleSel) {
+    if (!el || el._dragWired) return; el._dragWired = true;
+    el.addEventListener('mousedown', function (e) {
+      var h = e.target.closest(handleSel); if (!h || el.contains(e.target.closest('.pk-x'))) return;
+      if (e.target.closest('.pk-x')) return;
+      e.preventDefault();
+      el.style.transform = 'none';
+      var r = el.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+      el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+      function mv(ev) {
+        var L = Math.min(Math.max(4, ev.clientX - ox), window.innerWidth - el.offsetWidth - 4);
+        var T = Math.min(Math.max(4, ev.clientY - oy), window.innerHeight - el.offsetHeight - 4);
+        el.style.left = L + 'px'; el.style.top = T + 'px';
+      }
+      function up() { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+      document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+    });
+  }
+  // คีย์บอร์ดนำทางในป๊อปอัปเลือกฟิลด์ (.cb-f) — ↑↓ เลื่อน · Enter เลือก · Esc ปิด
+  function wireFieldNav(popup, scrollSel) {
+    var sc = popup.querySelector(scrollSel); if (!sc) return;
+    if (popup._navKey) document.removeEventListener('keydown', popup._navKey);
+    function items() { return [].slice.call(sc.querySelectorAll('.cb-f')); }
+    function cur() { return sc.querySelector('.cb-f.kbsel'); }
+    function setSel(el) { items().forEach(function (x) { x.classList.toggle('kbsel', x === el); }); if (el) el.scrollIntoView({ block: 'nearest' }); }
+    popup._navKey = function (e) {
+      if (popup.style.display === 'none' || !popup.offsetParent) return;
+      var all = items(); if (!all.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); var i = all.indexOf(cur());
+        i = e.key === 'ArrowDown' ? Math.min(all.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
+        setSel(all[i]);
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); var c = cur() || all[0]; if (c) c.click();
+      } else if (e.key === 'Escape') { e.preventDefault(); popup.style.display = 'none'; }
+    };
+    document.addEventListener('keydown', popup._navKey);
+    setSel(sc.querySelector('.cb-f.on') || items()[0]);
+  }
+
+  function openPicker(opt) {
+    opt = opt || {};
+    if (!pickEl) { pickEl = document.createElement('div'); pickEl.className = 'sg-pick'; document.body.appendChild(pickEl); }
+    pickSel = null;
+    pickEl.innerHTML = '<div class="pk-head">' + esc(opt.title || '🔗 เลือกสินค้าจากฐานข้อมูล') + '<span class="pk-x">✕</span></div>' +
+      '<input class="pk-q" placeholder="ค้นหารหัส 13 หลัก / ชื่อ / ยี่ห้อ / ขนาด / รุ่น…" />' +
+      '<div class="pk-list"><div class="pk-empty">กำลังโหลด…</div></div>' +
+      '<div class="pk-note">' + esc(opt.note || 'ดับเบิลคลิกรายการเพื่อผูก · รหัสที่ผูกทั้งแถวแล้วจะมีเครื่องหมาย ✓ และผูกซ้ำไม่ได้') + '</div>';
     var q = pickEl.querySelector('.pk-q'), list = pickEl.querySelector('.pk-list');
-    function renderList(filter) {
+    var items = [], used = usedRowCodes();
+    function paint(filter) {
       var f = (filter || '').toLowerCase();
-      list.innerHTML = items.filter(function (x) { return (x.code + ' ' + x.name + ' ' + x.key).toLowerCase().indexOf(f) >= 0; }).slice(0, 60)
-        .map(function (x) { return '<div class="pk-it" data-code="' + esc(x.key) + '"><span class="pk-code">' + esc(x.code) + '</span><span class="pk-name">' + esc(x.name) + '</span></div>'; }).join('') || '<div class="pk-empty">ไม่พบ</div>';
+      var rows = items.filter(function (x) { return (x.code13 + ' ' + x.name + ' ' + x.brandCode + ' ' + x.size + ' ' + x.model).toLowerCase().indexOf(f) >= 0; }).slice(0, 80);
+      list.innerHTML = rows.map(function (x) {
+        var taken = used[x.code13] != null;
+        var blocked = taken && !opt.allowUsed;
+        var inactive = x.status && x.status !== 'active';
+        return '<div class="pk-it' + (blocked ? ' pk-taken' : '') + (taken ? ' pk-linked' : '') + (pickSel === x.code13 ? ' pk-on' : '') + '" data-code="' + esc(x.code13) + '" title="' + (taken ? 'ผูกกับแถว ' + (used[x.code13] + 1) + ' แล้ว · คลิกขวาเพื่อถอดการเชื่อมต่อ' : 'ดับเบิลคลิก/Enter เพื่อผูก') + '">' +
+          '<span class="pk-code">' + esc(x.code13) + '</span><span class="pk-name">' + esc(x.name) + '</span>' +
+          (inactive ? '<span class="pk-badge pk-inact">inactive</span>' : '') + (taken ? '<span class="pk-badge pk-used">✓ แถว ' + (used[x.code13] + 1) + '</span>' : '') + '</div>';
+      }).join('') || '<div class="pk-empty">ไม่พบ</div>';
     }
-    renderList('');
-    q.oninput = function () { renderList(q.value); };
-    list.onclick = function (e) { var it = e.target.closest('.pk-it'); if (!it) return; closePicker(); onPick(it.dataset.code); };
+    function markSel() {   // อัปเดตไฮไลต์โดยไม่สร้าง DOM ใหม่ (กัน dblclick/Enter หลุด)
+      list.querySelectorAll('.pk-it').forEach(function (el) { el.classList.toggle('pk-on', el.dataset.code === pickSel); });
+    }
+    function selectedEl() { return list.querySelector('.pk-it.pk-on'); }
+    window.DBX.search({}).then(function (arr) { items = arr || []; paint(q.value); }).catch(function () { list.innerHTML = '<div class="pk-empty">โหลดฐานข้อมูลไม่ได้</div>'; });
+    q.oninput = function () { paint(q.value); };
+    function confirmPick(code) {
+      if (used[code] != null && !opt.allowUsed) { askDisconnect(code); return; }
+      closePicker(); opt.onPick(code);
+    }
+    // คลิกขวารายการที่ผูกแล้ว → ถามถอดการเชื่อมต่อ (Enter ยืนยัน)
+    function askDisconnect(code) {
+      var rr = used[code]; if (rr == null) return;
+      var bar = pickEl.querySelector('.pk-confirm');
+      if (!bar) { bar = document.createElement('div'); bar.className = 'pk-confirm'; pickEl.appendChild(bar); }
+      bar.innerHTML = '<div class="pkc-msg">⛓️‍💥 ถอดการเชื่อมต่อรหัส <b>' + esc(code) + '</b> ออกจากแถว ' + (rr + 1) + '?</div>' +
+        '<div class="pkc-btns"><button class="btn" data-pkc="no">ยกเลิก (Esc)</button><button class="btn primary" data-pkc="yes">ยืนยัน (Enter)</button></div>';
+      bar.style.display = 'block';
+      pickEl._pkcArmed = function () { bar.style.display = 'none'; pushUndo(); delete doc.rowLinks[rr]; used = usedRowCodes(); invalidate(); afterChange(); paint(q.value); toast('ถอดการเชื่อมต่อแถว ' + (rr + 1) + ' แล้ว'); };
+      bar.querySelector('[data-pkc="yes"]').onclick = function () { pickEl._pkcArmed(); pickEl._pkcArmed = null; };
+      bar.querySelector('[data-pkc="no"]').onclick = function () { bar.style.display = 'none'; pickEl._pkcArmed = null; };
+    }
+    list.onclick = function (e) { var it = e.target.closest('.pk-it'); if (!it) return; pickSel = it.dataset.code; markSel(); };
+    list.ondblclick = function (e) { var it = e.target.closest('.pk-it'); if (!it) return; pickSel = it.dataset.code; confirmPick(it.dataset.code); };
+    list.oncontextmenu = function (e) {
+      var it = e.target.closest('.pk-it'); if (!it) return;
+      e.preventDefault(); e.stopPropagation();
+      if (used[it.dataset.code] != null) { pickSel = it.dataset.code; markSel(); askDisconnect(it.dataset.code); }
+    };
+    function pickKey(e) {
+      if (pickEl.style.display !== 'block') return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (pickEl._pkcArmed) { pickEl._pkcArmed(); pickEl._pkcArmed = null; return; }
+        if (pickSel) confirmPick(pickSel);
+      } else if (e.key === 'Escape') {
+        var bar = pickEl.querySelector('.pk-confirm');
+        if (bar && bar.style.display === 'block') { e.preventDefault(); bar.style.display = 'none'; pickEl._pkcArmed = null; }
+        else closePicker();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var all = [].slice.call(list.querySelectorAll('.pk-it')); if (!all.length) return;
+        var idx = all.indexOf(selectedEl());
+        idx = e.key === 'ArrowDown' ? Math.min(all.length - 1, idx + 1) : Math.max(0, idx - 1);
+        pickSel = all[idx].dataset.code; markSel(); all[idx].scrollIntoView({ block: 'nearest' });
+      }
+    }
+    document.addEventListener('keydown', pickKey);
+    pickEl._detachKey = function () { document.removeEventListener('keydown', pickKey); };
     pickEl.querySelector('.pk-x').onclick = closePicker;
     pickEl.style.display = 'block';
+    makeDraggable(pickEl, '.pk-head');
+    clampPopup(pickEl);
     setTimeout(function () { q.focus(); }, 30);
   }
-  function closePicker() { if (pickEl) pickEl.style.display = 'none'; }
+  function closePicker() { if (pickEl) { pickEl.style.display = 'none'; if (pickEl._detachKey) pickEl._detachKey(); } }
+  function usedRowCodes() { var u = {}; Object.keys(doc.rowLinks || {}).forEach(function (rr) { var v = doc.rowLinks[rr]; if (isCode13(v)) u[v] = +rr; }); return u; }
 
   function linkRowDB() {
-    if (view.mode !== 'admin') return;
+    if (view.mode !== 'admin' || !window.DBX) return;
     var r = sel.r;
-    openPicker(function (code) {
-      pushUndo();
-      doc.rowLinks = doc.rowLinks || {};
-      doc.rowLinks[r] = code;
-      // DOT (E) เช็คจาก DB อัตโนมัติ
-      var dot = ensureCell(r, 4);
-      dot.f = '=DB("' + code + '","DOT")'; delete dot.v;
-      // ยี่ห้อ (C) อ้างอิง DB เป็นอักษรย่อ (OTANI → OT) · สี/พื้นหลังของช่องยังตกแต่งเองได้
-      var br = ensureCell(r, 2);
-      br.f = '=DB("' + code + '","ยี่ห้อ")'; delete br.v;
-      afterChange();
-      var inf = XL2.dbInfo(code);
-      toast('🔗 ลิงก์แถว ' + (r + 1) + ' กับ ' + inf.code + ' · ' + inf.name);
+    openPicker({
+      title: '🔗 ผูกแถว ' + (r + 1) + ' กับสินค้า',
+      onPick: function (code) {
+        // กฎ unique: รหัสที่ผูกทั้งแถวแล้ว ห้ามผูกซ้ำแถวอื่น
+        var used = usedRowCodes();
+        if (used[code] != null && used[code] !== r) { toast('⚠️ รหัสนี้ผูกกับแถว ' + (used[code] + 1) + ' แล้ว — ผูกซ้ำไม่ได้'); return; }
+        pushUndo();
+        doc.rowLinks = doc.rowLinks || {};
+        doc.rowLinks[r] = code;
+        invalidate(); afterChange();
+        window.DBX.getClean(code).then(function (p) { toast('🔗 ลิงก์แถว ' + (r + 1) + ' กับ ' + code + (p ? ' · ' + p.name : '')); });
+      }
     });
   }
   function unlinkRow() {
@@ -1088,7 +1635,58 @@
     if (!doc.rowLinks || !doc.rowLinks[sel.r]) { toast('แถวนี้ยังไม่ได้ลิงก์'); return; }
     pushUndo();
     delete doc.rowLinks[sel.r];
-    afterChange(); toast('ยกเลิกลิงก์แถวแล้ว');
+    invalidate(); afterChange(); toast('ยกเลิกลิงก์แถวแล้ว');
+  }
+
+  // ---------- 3C: ผูกเฉพาะช่อง (cell-link · ข้ามสินค้าได้ · ข้อยกเว้นของ unique) ----------
+  function linkCellDB() {
+    if (view.mode !== 'admin' || !window.DBX) return;
+    var a = anchorOf(sel.r, sel.c), r = a.r, c = a.c;
+    openPicker({
+      title: '🗄️ ลิงก์เฉพาะช่อง ' + XL2.colName(c) + (r + 1),
+      allowUsed: true,
+      note: 'ดับเบิลคลิกเลือกสินค้า แล้วเลือกฟิลด์ที่จะดึงมาแสดงในช่องนี้ (ข้ามสินค้าได้)',
+      onPick: function (code) { pickCellField(r, c, code); }
+    });
+  }
+  var cellFieldEl = null;
+  function pickCellField(r, c, code) {
+    if (!cellFieldEl) { cellFieldEl = document.createElement('div'); cellFieldEl.className = 'sg-pick sg-colbind'; document.body.appendChild(cellFieldEl); }
+    var groups = {};
+    window.DBX.FIELDS.forEach(function (f) { (groups[f.group] = groups[f.group] || []).push(f); });
+    var body = '';
+    Object.keys(groups).forEach(function (g) {
+      body += '<div class="cb-grp">' + esc(g) + '</div><div class="cb-fields">';
+      groups[g].forEach(function (f) { body += '<div class="cb-f' + (f.writable ? ' wr' : '') + '" data-field="' + f.key + '"><span class="cb-ic">' + (f.writable ? '✏️' : '🔒') + '</span>' + esc(f.label) + '</div>'; });
+      body += '</div>';
+    });
+    cellFieldEl.innerHTML = '<div class="pk-head">🗄️ ช่อง ' + XL2.colName(c) + (r + 1) + ' ← ฟิลด์ของ ' + esc(code) + '<span class="pk-x">✕</span></div>' +
+      '<div class="cb-scroll">' + body + '</div>' +
+      '<div class="pk-note">เลือกฟิลด์ที่จะดึงมาแสดงในช่องนี้ · ราคา (✏️) แก้/ส่งกลับได้ · อื่น ๆ (🔒) อ่านอย่างเดียว</div>';
+    cellFieldEl.style.display = 'block';
+    cellFieldEl.style.left = Math.min((window.innerWidth - cellFieldEl.offsetWidth) / 2, window.innerWidth - cellFieldEl.offsetWidth - 10) + 'px';
+    cellFieldEl.style.top = '14%';
+    makeDraggable(cellFieldEl, '.pk-head'); clampPopup(cellFieldEl); wireFieldNav(cellFieldEl, '.cb-scroll');
+    cellFieldEl.querySelector('.pk-x').onclick = function () { cellFieldEl.style.display = 'none'; };
+    cellFieldEl.querySelector('.cb-scroll').onclick = function (e) {
+      var f = e.target.closest('.cb-f'); if (!f) return;
+      cellFieldEl.style.display = 'none';
+      pushUndo();
+      doc.cellLinks = doc.cellLinks || {};
+      doc.cellLinks[r] = doc.cellLinks[r] || {};
+      doc.cellLinks[r][c] = { code: code, field: f.dataset.field };
+      invalidate(); afterChange();
+      toast('🗄️ ช่อง ' + XL2.colName(c) + (r + 1) + ' ← ' + code + ' · ' + window.DBX.fieldLabel(f.dataset.field));
+    };
+  }
+  function unlinkCell() {
+    if (view.mode !== 'admin') return;
+    var a = anchorOf(sel.r, sel.c), r = a.r, c = a.c;
+    if (!(doc.cellLinks && doc.cellLinks[r] && doc.cellLinks[r][c])) { toast('ช่องนี้ไม่ได้ลิงก์เฉพาะช่อง'); return; }
+    pushUndo();
+    delete doc.cellLinks[r][c];
+    if (!Object.keys(doc.cellLinks[r]).length) delete doc.cellLinks[r];
+    invalidate(); afterChange(); toast('ยกเลิกลิงก์เฉพาะช่องแล้ว');
   }
 
   // ---------- ส่งราคาเข้า DB (ราคาตั้ง/B/A/S → ช่อง 1/2/3/4 · ใช้เวลาจากตารางเวลา) ----------
@@ -1109,12 +1707,32 @@
     var hasChanges = Object.keys(doc.changes || {}).length > 0;
     if (!rows.length && !hasChanges) { toast('ยังไม่มีแถวที่ลิงก์ DB หรือการปรับราคา — คลิกขวาที่ช่องรุ่น → ลิงก์แถวกับสินค้า'); return; }
     var out = [];
+    var auditEntries = [], user = (window.DBX && DBX.currentUser()) || 'admin', dev = window.DBX ? DBX.deviceInfo() : {};
     rows.forEach(function (r) {
       r = +r;
+      var code = links[r];
       var prices = {};
-      PRICE_COLS.forEach(function (pc) { var v = valueOf(r, pc.c); if (XL2.isNumeric(v)) prices[pc.slot] = XL2.toN(v); });
-      out.push({ code: links[r], row: r + 1, prices: prices, effectiveAt: effectiveOf(r), queuedAt: new Date().toISOString() });
+      PRICE_COLS.forEach(function (pc) { var v = valueOf(r, pc.c); if (XL2.isNumeric(v)) prices['salePrice' + pc.slot] = XL2.toN(v); });
+      // ส่งจริงผ่านชั้นกลาง DBX (เขียนกลับได้เฉพาะ 5 ราคา — กฎเหล็ก)
+      if (window.DBX && isCode13(code) && Object.keys(prices).length) {
+        DBX.pushPrices(code, prices);
+        // audit + ประวัติราคา (เฉพาะช่องที่ปรับรอบนี้)
+        var rc = doc.changes && doc.changes[r];
+        PRICE_COLS.forEach(function (pc) {
+          var field = 'salePrice' + pc.slot, nv = prices[field];
+          if (nv == null) return;
+          var ch = rc && rc[pc.c];
+          var ov = ch ? XL2.toN(ch.old) : null;
+          if (ch && ov !== nv) {
+            var p = dbCache[code];
+            auditEntries.push({ ts: Date.now(), code13: code, name: p ? p.name : '', field: field, oldV: ov, newV: nv, user: user, device: dev.ua ? (dev.platform + ' · ' + dev.screen) : '', result: 'ok' });
+            DBX.pushPriceHistory(code, field, nv, Date.now());
+          }
+        });
+      }
+      out.push({ code: code, row: r + 1, prices: prices, effectiveAt: effectiveOf(r), queuedAt: new Date().toISOString() });
     });
+    if (window.DBX && auditEntries.length) DBX.logAudit(auditEntries);
     try {
       var box = JSON.parse(localStorage.getItem('xls2_db_outbox') || '[]');
       box = box.concat(out);
@@ -1241,15 +1859,35 @@
     afterChange(); toast('พอดีข้อความ: ' + XL2.colName(ci) + ' = ' + doc.colW[ci] + ' px');
   }
   function showTip(x, y, text) {
+    tipEl.className = 'sg-tip';
     tipEl.style.display = 'block';
     tipEl.style.left = (x - rootEl.getBoundingClientRect().left + rootEl.scrollLeft + 14) + 'px';
     tipEl.style.top = (y - rootEl.getBoundingClientRect().top + rootEl.scrollTop - 8) + 'px';
     tipEl.textContent = text;
   }
+  // ป๊อปอัปชื่อสินค้า: วางเหนือ/ใต้แถว ไม่ทับแถวเดิม ไม่หลุดเฟรม
+  function showLinkTip(g, text, bad, isHtml) {
+    tipEl.className = 'sg-tip linktip' + (bad ? ' bad' : '') + (isHtml ? ' tip-multi' : '');
+    if (isHtml) tipEl.innerHTML = text; else tipEl.textContent = text;
+    tipEl.style.display = 'block';
+    var gr = g.getBoundingClientRect(), rootR = rootEl.getBoundingClientRect();
+    var th = tipEl.offsetHeight, tw = tipEl.offsetWidth;
+    var topC = gr.top - th - 5;                          // เหนือแถว
+    if (topC < rootR.top + 2) topC = gr.bottom + 5;      // ไม่พอด้านบน → ใต้แถว
+    topC = Math.max(rootR.top + 2, Math.min(topC, rootR.bottom - th - 2));
+    var leftC = Math.max(rootR.left + 2, Math.min(gr.left, rootR.right - tw - 2));
+    tipEl.style.left = (leftC - rootR.left + rootEl.scrollLeft) + 'px';
+    tipEl.style.top = (topC - rootR.top + rootEl.scrollTop) + 'px';
+  }
   function hideTip() { tipEl.style.display = 'none'; }
 
   // ---------- context menu (จัดหมวด + ซับเมนูย่อย) ----------
-  function openCtx(x, y) {
+  // ขนาด/ฟอนต์ ในเมนูจัดตัวอักษร — ผู้ใช้เพิ่ม/ลบเองได้ + จัดเรียงอัตโนมัติ
+  function ctxSizes() { try { var a = JSON.parse(localStorage.getItem('xls2_ctx_sizes') || 'null'); if (Array.isArray(a) && a.length) return a.map(Number).filter(function (n) { return n > 0; }); } catch (e) {} return [9, 10, 12, 14, 18, 24]; }
+  function saveCtxSizes(a) { var u = []; a.forEach(function (n) { n = Math.round(+n); if (n > 0 && u.indexOf(n) < 0) u.push(n); }); u.sort(function (x, y) { return x - y; }); localStorage.setItem('xls2_ctx_sizes', JSON.stringify(u)); }
+  function ctxFonts() { try { var a = JSON.parse(localStorage.getItem('xls2_ctx_fonts') || 'null'); if (Array.isArray(a) && a.length) return a; } catch (e) {} return [['Arial Black', 'Black'], ['Tahoma', 'Tahoma'], ['Sarabun', 'สารบรรณ'], ['Prompt', 'พรอมพต์'], ['Kanit', 'คนิต']]; }
+  function saveCtxFonts(a) { a = a.slice().sort(function (x, y) { return String(x[1]).localeCompare(String(y[1]), 'th'); }); localStorage.setItem('xls2_ctx_fonts', JSON.stringify(a)); }
+  function openCtx(x, y, keepSub) {
     if (view.mode !== 'admin') return;
     var cell = cellAt(anchorOf(sel.r, sel.c).r, anchorOf(sel.r, sel.c).c);
     var t = cell ? cell.t : 'auto';
@@ -1264,7 +1902,7 @@
     }
     function sep() { return '<div class="ctx-sep"></div>'; }
 
-    var html = '';
+    var html = '<div class="ctx-drag" title="ลากเพื่อย้ายเมนู">⠿ ลากเพื่อย้าย</div>';
     // ใช้บ่อยสุด — อยู่ชั้นบนสุด
     html += it('✂️', 'ตัด', function () { doCopy(true); }, 'Ctrl+X');
     html += it('📋', 'คัดลอก', function () { doCopy(false); }, 'Ctrl+C');
@@ -1299,39 +1937,46 @@
       it('ƒ', 'ใส่สูตร…', function () { startEdit('='); }));
     // จัดตัวอักษร: จัดตำแหน่ง · สี · ขนาด · ฟอนต์
     function chip(htmlIn, fn, title) { reg.push(fn); return '<span class="ctx-chip" data-i="' + (reg.length - 1) + '" title="' + esc(title || '') + '">' + htmlIn + '</span>'; }
+    function dchip(htmlIn, fn, title, delAttr) { reg.push(fn); return '<span class="ctx-chip ctx-delable" data-i="' + (reg.length - 1) + '" ' + delAttr + ' title="' + esc(title || '') + '">' + htmlIn + '</span>'; }
+    function addChip(kind) { return '<span class="ctx-chip ctx-addchip" data-add="' + kind + '" title="เพิ่มเอง">＋</span>'; }
     function chipRow(label, chips) { return '<div class="ctx-row"><span class="ctx-rowlab">' + esc(label) + '</span><span class="ctx-chips">' + chips + '</span></div>'; }
-    var FCs = [['000000', 'ดำ'], ['FF0000', 'แดง'], ['0000FF', 'น้ำเงิน'], ['008000', 'เขียว'], ['FF6600', 'ส้ม'], ['7030A0', 'ม่วง']];
-    var BGs = [[null, 'ไม่มีสี'], ['FFFF00', 'เหลือง'], ['CCFFCC', 'เขียวอ่อน'], ['CCFFFF', 'ฟ้า'], ['FFCCFF', 'ชมพู'], ['FDE9D9', 'ส้มอ่อน']];
+    // สีหลักของเมนูคลิกขวา = สีหลักเดียวกับปุ่มบนแถบเครื่องมือ (อัปเดตตามที่ผู้ใช้ปรับ)
+    function cfMainRead(ns, def) { try { var a = JSON.parse(localStorage.getItem('xls2_cf_' + ns + '_main') || 'null'); if (Array.isArray(a) && a.length) return a.map(function (c) { return String(c).replace('#', '').toUpperCase(); }); } catch (e) {} return def; }
+    var FCs = cfMainRead('font', ['000000', '808080', 'FF0000', 'C00000', 'FF6600', '008000', '0000FF', '7030A0']);
+    var BGs = cfMainRead('fill', ['FFFF00', 'FF9900', '92D050', '00B0F0', '00FFFF', 'FF99CC', 'D8D8D8', 'FF6666']);
     html += sub('🅰️', 'จัดตัวอักษร',
-      it('◧', 'ชิดซ้าย', function () { applyStyle('al', 'left'); }) +
-      it('▤', 'กึ่งกลาง', function () { applyStyle('al', 'center'); }) +
-      it('◨', 'ชิดขวา', function () { applyStyle('al', 'right'); }) +
-      sep() +
-      it('⤒', 'ชิดบน', function () { applyStyle('va', 'top'); }) +
-      it('↔', 'กึ่งกลางแนวตั้ง', function () { applyStyle('va', 'middle'); }) +
-      it('⤓', 'ชิดล่าง', function () { applyStyle('va', 'bottom'); }) +
-      sep() +
-      it('𝐁', 'ตัวหนา', function () { applyStyle('b', 'toggle'); }, 'Ctrl+B') +
-      it('𝐼', 'ตัวเอียง', function () { applyStyle('i', 'toggle'); }, 'Ctrl+I') +
-      it('U̲', 'ขีดเส้นใต้', function () { applyStyle('u', 'toggle'); }, 'Ctrl+U') +
-      sep() +
+      chipRow('แนวนอน',
+        chip('◧', function () { applyStyle('al', 'left'); }, 'ชิดซ้าย') +
+        chip('▤', function () { applyStyle('al', 'center'); }, 'กึ่งกลาง') +
+        chip('◨', function () { applyStyle('al', 'right'); }, 'ชิดขวา')) +
+      chipRow('แนวตั้ง',
+        chip('⤒', function () { applyStyle('va', 'top'); }, 'ชิดบน') +
+        chip('↔', function () { applyStyle('va', 'middle'); }, 'กึ่งกลางแนวตั้ง') +
+        chip('⤓', function () { applyStyle('va', 'bottom'); }, 'ชิดล่าง')) +
+      chipRow('ตัวอักษร',
+        chip('𝐁', function () { applyStyle('b', 'toggle'); }, 'ตัวหนา (Ctrl+B)') +
+        chip('𝐼', function () { applyStyle('i', 'toggle'); }, 'ตัวเอียง (Ctrl+I)') +
+        chip('U̲', function () { applyStyle('u', 'toggle'); }, 'ขีดเส้นใต้ (Ctrl+U)')) +
       chipRow('ขนาด',
-        chip('9', function () { applyStyle('fs', 9); }) + chip('10', function () { applyStyle('fs', null); }, 'ปกติ') +
-        chip('12', function () { applyStyle('fs', 12); }) + chip('14', function () { applyStyle('fs', 14); }) +
-        chip('18', function () { applyStyle('fs', 18); }) + chip('24', function () { applyStyle('fs', 24); })) +
+        chip('ปกติ', function () { applyStyle('fs', null); }, 'ขนาดปกติ') +
+        ctxSizes().map(function (n) { return dchip(String(n), function () { applyStyle('fs', n); }, n + 'px · คลิกขวาเพื่อลบ', 'data-del-size="' + n + '"'); }).join('') +
+        addChip('size')) +
       chipRow('สีอักษร',
-        FCs.map(function (cdef) { return chip('<span class="ctx-dot" style="background:#' + cdef[0] + '"></span>', function () { applyStyle('fc', cdef[0]); }, cdef[1]); }).join('') +
+        FCs.map(function (hex) { return chip('<span class="ctx-dot" style="background:#' + hex + '"></span>', function () { applyStyle('fc', hex); }, '#' + hex); }).join('') +
         chip('✕', function () { applyStyle('fc', null); }, 'ค่าเดิม')) +
       chipRow('สีพื้น',
-        BGs.map(function (bdef) { return bdef[0] ? chip('<span class="ctx-dot" style="background:#' + bdef[0] + ';border-color:#bbb;"></span>', function () { applyStyle('bg', bdef[0]); }, bdef[1]) : chip('✕', function () { applyStyle('bg', null); }, 'ไม่มีสี'); }).join('')) +
-      sep() +
+        chip('✕', function () { applyStyle('bg', null); }, 'ไม่มีสี') +
+        BGs.map(function (hex) { return chip('<span class="ctx-dot" style="background:#' + hex + ';border-color:#bbb;"></span>', function () { applyStyle('bg', hex); }, '#' + hex); }).join('')) +
       chipRow('ฟอนต์',
-        [['', 'ปกติ'], ['Arial Black', 'Black'], ['Tahoma', 'Tahoma'], ['Sarabun', 'สารบรรณ'], ['Prompt', 'พรอมพต์'], ['Kanit', 'คนิต']].map(function (fdef) {
-          return chip('<span style="font-family:\'' + fdef[0] + '\'">' + esc(fdef[1]) + '</span>', function () { applyStyle('ff', fdef[0] || null); }, fdef[0] || 'ค่าเริ่มต้น');
-        }).join('')));
+        chip('ปกติ', function () { applyStyle('ff', null); }, 'ฟอนต์ปกติ') +
+        ctxFonts().map(function (fdef) {
+          return dchip('<span style="font-family:\'' + fdef[0] + '\'">' + esc(fdef[1]) + '</span>', function () { applyStyle('ff', fdef[0] || null); }, (fdef[0] || 'ปกติ') + ' · คลิกขวาเพื่อลบ', 'data-del-font="' + esc(fdef[0]) + '"');
+        }).join('') +
+        addChip('font')));
     html += sub('🗄️', 'ฐานข้อมูล / ราคา',
-      it('🔗', (doc.rowLinks && doc.rowLinks[sel.r]) ? ('ลิงก์: ' + XL2.dbInfo(doc.rowLinks[sel.r]).code + ' · ' + XL2.dbInfo(doc.rowLinks[sel.r]).name + ' (เปลี่ยน)…') : 'ลิงก์แถวกับสินค้า DB…', linkRowDB) +
-      it('🗄️', 'ลิงก์เฉพาะช่องนี้…', linkDB) +
+      it('🔗', rowCode(sel.r) ? ('ลิงก์แถว: ' + esc(rowLinkLabel(sel.r).replace(/^⚠️[^—]*— /, '')) + ' (เปลี่ยน)…') : 'ลิงก์แถวกับสินค้า DB…', linkRowDB) +
+      it('🗄️', 'ลิงก์เฉพาะช่องนี้…', linkCellDB) +
+      ((doc.cellLinks && doc.cellLinks[anchorOf(sel.r, sel.c).r] && doc.cellLinks[anchorOf(sel.r, sel.c).r][anchorOf(sel.r, sel.c).c]) ? it('✂️', 'ยกเลิกลิงก์เฉพาะช่องนี้', unlinkCell) : '') +
       it('⛓️', 'ยกเลิกลิงก์แถว', unlinkRow) +
       sep() +
       it('📤', 'อัพเดทราคาเข้า DB…', function () { var b = document.getElementById('btnSync'); if (b) b.click(); else syncToDB(); }) +
@@ -1342,30 +1987,48 @@
         setRowSchedule(w.trim());
       }) +
       it('🧽', 'ล้างเครื่องหมายปรับราคา (เริ่มรอบใหม่)', clearChanges));
-    html += sub('🙈', 'ซ่อน / ล็อก แถว-คอลัมน์',
-      it('🙈', 'ซ่อนแถว (แบบ Excel)', hideRows) +
-      it('👁️', 'เลิกซ่อนแถว', unhideRows) +
-      it('🙈', 'ซ่อนคอลัมน์ (แบบ Excel)', hideCols) +
-      it('👁️', 'เลิกซ่อนคอลัมน์', unhideCols) +
-      it('🔄', 'แสดงที่ซ่อนทั้งหมด', showAllHidden) +
-      sep() +
-      it('🔒', 'ล็อกแถว (เฉพาะแอดมิน เห็น)', toggleLockRows) +
-      it('🔒', 'ล็อกคอลัมน์ (เฉพาะแอดมิน)', toggleLockCols) +
-      sep() +
-      it('👁️', 'ซ่อนแถวนี้เฉพาะโหมดผู้ใช้', toggleUserHideRows) +
-      it('👁️', 'ซ่อนคอลัมน์นี้เฉพาะผู้ใช้', toggleUserHideCols));
+    (function () {
+      var R = range();
+      var rLocked = true; for (var r = R.r1; r <= R.r2; r++) if (!(doc.adminRows && doc.adminRows[r])) { rLocked = false; break; }
+      var cLocked = true; for (var c = R.c1; c <= R.c2; c++) if (!(doc.adminCols && doc.adminCols[c])) { cLocked = false; break; }
+      html += sub('🙈', 'ซ่อน / ล็อก แถว-คอลัมน์',
+        it('🙈', 'ซ่อนแถว (แบบ Excel)', hideRows) +
+        it('👁️', 'เลิกซ่อนแถว', unhideRows) +
+        it('🙈', 'ซ่อนคอลัมน์ (แบบ Excel)', hideCols) +
+        it('👁️', 'เลิกซ่อนคอลัมน์', unhideCols) +
+        it('🔄', 'แสดงที่ซ่อนทั้งหมด', showAllHidden) +
+        sep() +
+        it(rLocked ? '🔓' : '🔒', rLocked ? 'ปลดล็อกการมองเห็นแถว (ให้ผู้ใช้เห็น)' : 'ล็อกแถว (ซ่อนจากผู้ใช้)', toggleLockRows) +
+        it(cLocked ? '🔓' : '🔒', cLocked ? 'ปลดล็อกการมองเห็นคอลัมน์ (ให้ผู้ใช้เห็น)' : 'ล็อกคอลัมน์ (ซ่อนจากผู้ใช้)', toggleLockCols));
+    })();
     html += sep();
     html += it('⊞', 'ผสาน/ยกเลิกผสานเซลล์', toggleMerge);
 
     ctxEl.innerHTML = html;
     ctxEl.style.display = 'block';
+    ctxEl.style.maxHeight = ''; ctxEl.style.overflowY = '';   // ไม่ตัด overflow — ให้ซับเมนูรายละเอียดกางออกข้างได้
     var vw = window.innerWidth, vh = window.innerHeight;
-    var lx = Math.min(x, vw - ctxEl.offsetWidth - 8);
+    var mw = ctxEl.offsetWidth, mh = ctxEl.offsetHeight;
+    var gap = 6;
+    // อิงจุดที่คลิกเสมอ (ใช้ได้ทั้งช่อง/หัวคอลัมน์/เลขแถว) · เปิดขวา-ล่าง · พลิกด้าน/หนีขอบ ไม่หลุดเฟรม
+    var lx = (x + gap + mw <= vw - 4) ? (x + gap) : (x - gap - mw >= 4 ? (x - gap - mw) : (vw - mw - 4));
+    var ty = (y + gap + mh <= vh - 4) ? (y + gap) : (y - gap - mh >= 4 ? (y - gap - mh) : (vh - mh - 4));
+    lx = Math.max(4, Math.min(lx, vw - mw - 4));
+    ty = Math.max(4, Math.min(ty, vh - mh - 4));
     ctxEl.style.left = lx + 'px';
-    // วิเคราะห์ตำแหน่งจอ: คลิกครึ่งล่าง → เมนูกางขึ้นข้างบนสุด · คลิกครึ่งบน → กางลงข้างล่าง
-    var mh = ctxEl.offsetHeight;
-    var topPos = (y > vh / 2) ? (y - mh - 6) : (y + 6);
-    ctxEl.style.top = Math.max(8, Math.min(topPos, vh - mh - 8)) + 'px';
+    ctxEl.style.top = ty + 'px';
+    // แถบลากย้ายเมนู
+    var dh = ctxEl.querySelector('.ctx-drag');
+    if (dh) dh.onmousedown = function (e) {
+      e.preventDefault(); e.stopPropagation();
+      var sx = e.clientX, sy = e.clientY, ol = parseFloat(ctxEl.style.left) || 0, ot = parseFloat(ctxEl.style.top) || 0;
+      function mv(ev) {
+        ctxEl.style.left = Math.max(0, Math.min(ev.clientX - sx + ol, window.innerWidth - ctxEl.offsetWidth)) + 'px';
+        ctxEl.style.top = Math.max(0, Math.min(ev.clientY - sy + ot, window.innerHeight - ctxEl.offsetHeight)) + 'px';
+      }
+      function up() { document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); }
+      document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true);
+    };
     // ซับเมนูย่อย: ขยับขึ้นให้พอดีจอ — ข้อมูลเยอะก็ขยับสูงขึ้นอีก
     ctxEl.querySelectorAll('.ctx-it.has-sub').forEach(function (itEl) {
       itEl.addEventListener('mouseenter', function () {
@@ -1381,40 +2044,98 @@
     });
     // ถ้าชิดขอบขวา ให้ซับเมนูกางออกทางซ้ายแทน
     ctxEl.classList.toggle('flip', lx + ctxEl.offsetWidth + 200 > vw);
+    function rebuildSub() { openCtx(x, y, true); }
+    function addSizePrompt() { var v = prompt('ใส่ขนาดตัวอักษรที่ต้องการ (เช่น 16, 28, 36)'); if (v === null) return; var n = Math.round(parseFloat(v)); if (!(n > 0)) return; saveCtxSizes(ctxSizes().concat([n])); rebuildSub(); }
+    function addFontPrompt() {
+      var fam = prompt('ใส่ชื่อฟอนต์/ภาษา (เช่น Times New Roman, Angsana New, Noto Sans Thai)'); if (fam === null) return; fam = fam.trim(); if (!fam) return;
+      var label = prompt('ชื่อที่จะแสดงในเมนู (เว้นว่าง = ใช้ชื่อฟอนต์)', fam); if (label === null) return; label = (label || '').trim() || fam;
+      var arr = ctxFonts().filter(function (p) { return String(p[0]).toLowerCase() !== fam.toLowerCase(); }); arr.push([fam, label]); saveCtxFonts(arr); rebuildSub();
+    }
     ctxEl.onclick = function (e) {
+      var add = e.target.closest('.ctx-addchip');
+      if (add) { e.stopPropagation(); if (add.dataset.add === 'size') addSizePrompt(); else addFontPrompt(); return; }
       var el = e.target.closest('[data-i]');
       if (!el) return;
       closeCtx();
       reg[+el.dataset.i]();
     };
+    // คลิกขวาที่ชิปขนาด/ฟอนต์ = ลบออกจากรายการ
+    ctxEl.oncontextmenu = function (e) {
+      var ds = e.target.closest('[data-del-size]');
+      if (ds) { e.preventDefault(); e.stopPropagation(); var n = +ds.getAttribute('data-del-size'); saveCtxSizes(ctxSizes().filter(function (x) { return x !== n; })); rebuildSub(); return; }
+      var df = e.target.closest('[data-del-font]');
+      if (df) { e.preventDefault(); e.stopPropagation(); var fam = df.getAttribute('data-del-font'); saveCtxFonts(ctxFonts().filter(function (p) { return String(p[0]) !== fam; })); rebuildSub(); return; }
+    };
+    // หลังสร้างเมนูใหม่ (เพิ่ม/ลบขนาด-ฟอนต์) — เปิดซับเมนูจัดตัวอักษรค้างไว้
+    if (keepSub) {
+      var subEl = [].slice.call(ctxEl.querySelectorAll('.ctx-it.has-sub')).filter(function (e2) { return /จัดตัวอักษร/.test(e2.textContent); })[0];
+      if (subEl) {
+        var fly2 = subEl.querySelector('.ctx-flyout');
+        if (fly2) {
+          fly2.style.display = 'block';
+          var ir2 = subEl.getBoundingClientRect(); var fh2 = fly2.offsetHeight;
+          var des2 = Math.max(8, Math.min(ir2.top - 5, window.innerHeight - fh2 - 8));
+          fly2.style.top = (des2 - ir2.top) + 'px';
+          subEl.addEventListener('mouseleave', function () { fly2.style.display = ''; fly2.style.top = ''; }, { once: true });
+        }
+      }
+    }
   }
   function closeCtx() { ctxEl.style.display = 'none'; }
 
   // ---------- price-change detail popover (คลิกดูรายละเอียด ขึ้น/ลงเท่าไหร่) ----------
   var popEl2 = null;
+  function priceSlotField(c) { for (var i = 0; i < PRICE_COLS.length; i++) if (PRICE_COLS[i].c === c) return 'salePrice' + PRICE_COLS[i].slot; return null; }
   function showPricePop(r, c, td) {
+    var isPrice = !!PRICE_NAME[c];
     var chg = doc.changes && doc.changes[r] && doc.changes[r][c];
-    if (!chg) return;
+    if (chg && chgExpired(chg)) chg = null;
+    var curV = valueOf(r, c), curN = nOr(curV, 0);
+    if (!isPrice && !chg) return;
+    if (isPrice && !XL2.isNumeric(curV) && !chg) return;
     if (!popEl2) { popEl2 = document.createElement('div'); popEl2.className = 'sg-pricepop'; document.body.appendChild(popEl2); }
-    var curV = valueOf(r, c);
-    var oldN = nOr(chg.old, 0), curN = nOr(curV, oldN);
-    var d = curN - oldN;
-    var pct = oldN ? Math.round(Math.abs(d) / oldN * 1000) / 10 : 0;
-    var eff = parseEff(chg.effectiveAt);
-    var pending = eff.getTime() > Date.now();
     var name = PRICE_NAME[c] || 'ราคา';
-    popEl2.innerHTML =
-      '<div class="pp-head">' + (pending ? '⏳ กำลังจะปรับปรุงราคา' : (d > 0 ? '▲ ปรับขึ้นแล้ว' : d < 0 ? '▼ ปรับลงแล้ว' : 'ปรับปรุงแล้ว')) + '</div>' +
-      '<div class="pp-row"><span>' + esc(name) + ' เดิม</span><b>' + XL2.fmtNum(oldN) + '</b></div>' +
-      '<div class="pp-row"><span>' + (pending ? 'ราคาใหม่' : 'ปัจจุบัน') + '</span><b>' + XL2.fmtNum(curN) + '</b></div>' +
-      (d !== 0 ? '<div class="pp-row pp-d ' + (d > 0 ? 'up' : 'dn') + '"><span>ส่วนต่าง</span><b>' + (d > 0 ? '+' : '−') + XL2.fmtNum(Math.abs(d)) + ' (' + pct + '%)</b></div>' : '') +
-      (chg.effectiveAt && chg.effectiveAt !== 'ทันที' ? '<div class="pp-eff">มีผล: ' + esc(chg.effectiveAt) + '</div>' : '');
+    var html = '';
+    // ส่วนการปรับราคา (ถ้ามี)
+    if (chg) {
+      var oldN = nOr(chg.old, 0), cN = nOr(curV, oldN), d = cN - oldN;
+      var pct = oldN ? Math.round(Math.abs(d) / oldN * 1000) / 10 : 0;
+      var eff = parseEff(chg.effectiveAt), pending = eff.getTime() > Date.now();
+      html += '<div class="pp-head">' + (pending ? '⏳ กำลังจะปรับปรุงราคา' : (d > 0 ? '▲ ปรับขึ้นแล้ว' : d < 0 ? '▼ ปรับลงแล้ว' : 'ปรับปรุงแล้ว')) + '</div>' +
+        '<div class="pp-row"><span>' + esc(name) + ' เดิม</span><b>' + XL2.fmtNum(oldN) + '</b></div>' +
+        '<div class="pp-row"><span>' + (pending ? 'ราคาใหม่' : 'ปัจจุบัน') + '</span><b>' + XL2.fmtNum(cN) + '</b></div>' +
+        (d !== 0 ? '<div class="pp-row pp-d ' + (d > 0 ? 'up' : 'dn') + '"><span>ส่วนต่าง</span><b>' + (d > 0 ? '+' : '−') + XL2.fmtNum(Math.abs(d)) + ' (' + pct + '%)</b></div>' : '') +
+        (chg.effectiveAt && chg.effectiveAt !== 'ทันที' ? '<div class="pp-eff">มีผล: ' + esc(chg.effectiveAt) + '</div>' : '');
+    } else {
+      html += '<div class="pp-head">💲 ' + esc(name) + '</div><div class="pp-row"><span>ราคา (เครดิต)</span><b>' + XL2.fmtNum(curN) + '</b></div>';
+    }
+    // เครดิต + VAT (คำนวณตามกฎ)
+    if (window.DBX && isPrice && curN > 0) {
+      var pr = DBX.computePricing(curN);
+      html += '<div class="pp-sep"></div>' +
+        '<div class="pp-row pp-credit"><span>เครดิต + VAT ' + Math.round(pr.vatRate * 100) + '%</span><b>' + XL2.fmtNum(pr.creditVatRounded) + '</b></div>' +
+        '<div class="pp-sub">ปัดขึ้นทีละ ' + pr.roundStep + ' (ก่อนปัด ' + pr.creditVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')</div>';
+    }
+    // ประวัติราคา (3 รอบ) + วันที่ใช้ล่าสุด
+    var code = rowCode(r), fld = priceSlotField(c);
+    if (window.DBX && code && fld) {
+      var hist = (DBX.priceHistory(code) || {})[fld];
+      if (hist && hist.length) {
+        html += '<div class="pp-sep"></div><div class="pp-histlbl">ประวัติราคา (ล่าสุด → เก่า)</div>';
+        html += hist.map(function (h, i) {
+          var dt = new Date(h.ts);
+          return '<div class="pp-hist"><span>' + (i === 0 ? '★ ใช้ล่าสุด' : 'ก่อนหน้า ' + i) + '</span><b>' + XL2.fmtNum(h.v) + '</b><span class="pp-histdt">' + dt.toLocaleDateString('th-TH') + '</span></div>';
+        }).join('');
+      }
+    }
+    popEl2.innerHTML = html;
     var rect = td.getBoundingClientRect();
     popEl2.style.display = 'block';
-    popEl2.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
-    popEl2.style.top = (rect.bottom + 4) + 'px';
+    popEl2.style.left = Math.min(rect.left, window.innerWidth - 230) + 'px';
+    popEl2.style.top = Math.min(rect.bottom + 4, window.innerHeight - popEl2.offsetHeight - 8) + 'px';
+    if (window.PopupStack) PopupStack.push(popEl2, hidePricePop);
   }
-  function hidePricePop() { if (popEl2) popEl2.style.display = 'none'; }
+  function hidePricePop() { if (popEl2) { popEl2.style.display = 'none'; if (window.PopupStack) PopupStack.remove(popEl2); } }
 
   // ---------- fill down / right (Ctrl+D / Ctrl+R แบบ Excel) ----------
   function fillDown() {
@@ -1557,6 +2278,11 @@
   var drag = null;  // 'cell' | 'gut' | 'head' | 'fill'
   function onMouseDown(e) {
     closeCtx();
+    // คลิกช่องสถานะ → เปิด side panel รายละเอียดสินค้า
+    if (e.button === 0) {
+      var sccd = e.target.closest('td.sg-statuscell');
+      if (sccd && window.DBX && rowCode(+sccd.dataset.r)) { openDetailPanel(+sccd.dataset.r, sccd); e.preventDefault(); return; }
+    }
     if (e.target.classList.contains('sg-rzc')) { startRzCol(+e.target.dataset.rz, e.clientX); e.preventDefault(); return; }
     if (e.target.classList.contains('sg-rzr')) { startRzRow(+e.target.dataset.rzr, e.clientY); e.preventDefault(); return; }
     // จุดจับมุมขวาล่าง (fill handle) — ลากเพื่อก๊อปปี้ลง/ขวาเหมือน Excel
@@ -1610,19 +2336,84 @@
     var td = e.target.closest('td.sg-c');
     if (!td) return;
     if (editing) commitEdit();
-    if (view.mode === 'user' && td.classList.contains('pclick')) {
+    if ((view.mode === 'user' && td.classList.contains('pclick')) || (PRICE_NAME[+td.dataset.c] && rowCode(+td.dataset.r))) {
       showPricePop(+td.dataset.r, +td.dataset.c, td);
     } else hidePricePop();
     if (e.button === 2) { // right click: keep selection if inside
       var r = +td.dataset.r, c = +td.dataset.c, R = range();
-      if (r < R.r1 || r > R.r2 || c < R.c1 || c > R.c2) setActive(r, c);
+      if (r < R.r1 || r > R.r2 || c < R.c1 || c > R.c2) setActive(r, c, false, true);
       return;
     }
-    setActive(+td.dataset.r, +td.dataset.c, e.shiftKey);
+    setActive(+td.dataset.r, +td.dataset.c, e.shiftKey, true);
     drag = 'cell';
     rootEl.focus();
   }
+  var linkTipShown = false;
   function onMouseMove(e) {
+    // ป้ายชื่อสินค้าทันทีเมื่อชี้เลขแถวที่ลิงก์กับ DB (อ้างอิงชื่อจากฐานข้อมูล)
+    if (!rz && !drag) {
+      // hover หัวคอลัมน์ที่ผูก DB/สถานะ → popup บอกว่าผูกกับอะไร
+      var hh0 = e.target.closest('th.sg-h');
+      if (hh0 && window.DBX && view.mode === 'admin') {
+        var hc = +hh0.dataset.hc;
+        var locked = doc.adminCols && doc.adminCols[hc];
+        var lockTag = locked ? '<div class="tipm-lock">' + esc(lockGlyph() + ' ' + lockDesc()) + '</div>' : '';
+        var msg = '';
+        if (doc.statusCol === hc) {
+          var seen = {}, lines = [];
+          for (var rr = 0; rr < doc.nRows; rr++) {
+            statusIconsFor(rr).forEach(function (d) { if (!seen[d.key]) { seen[d.key] = 1; lines.push('<div class="tipm-row"><span' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + '</span> ' + esc(d.label) + (d.popup ? ' <i>— ' + esc(d.popup) + '</i>' : '') + '</div>'); } });
+          }
+          msg = '<div class="tipm-head">📊 คอลัมน์สถานะ — ไอคอนที่แสดงในคอลัมน์นี้</div>' + (lines.length ? lines.join('') : '<div class="tipm-row">— ยังไม่มีสถานะ —</div>') + lockTag;
+        } else {
+          var cmH = doc.columnMap && doc.columnMap[hc];
+          if (cmH) msg = '<div class="tipm-head">' + (cmH.mode === 'write' ? '✏️ เขียนกลับ DB ได้' : '🔗 อ่านอย่างเดียว') + '</div><div class="tipm-row">ผูกฟิลด์: ' + esc(window.DBX.fieldLabel(cmH.field)) + '</div>' + lockTag;
+          else if (locked) msg = '<div class="tipm-head">คอลัมน์ ' + XL2.colName(hc) + '</div>' + lockTag;   // คอลัมน์ที่ล็อกอย่างเดียว ก็แสดง popup
+        }
+        if (msg) { showLinkTip(hh0, msg, false, true); linkTipShown = true; return; }
+        if (linkTipShown) { hideTip(); linkTipShown = false; }
+      }
+      // hover ไอคอนแม่กุญแจ → popup คำอธิบาย
+      var lkIc = e.target.closest('.sg-lockic');
+      if (lkIc) { showLinkTip(lkIc, lockGlyph() + ' ' + lockDesc(), false); linkTipShown = true; return; }
+      // hover ไอคอนสถานะ → popup อธิบาย (เหนือ/ใต้แถว ไม่บัง ไม่หลุดเฟรม)
+      var stIc = e.target.closest('.sg-st-ic');
+      if (stIc && window.DBX) {
+        var def = window.DBX.statusDefByKey(stIc.dataset.stkey);
+        if (def) { showLinkTip(stIc, (def.icon || '') + ' ' + def.label + (def.popup ? ' — ' + def.popup : ''), false); linkTipShown = true; return; }
+      }
+      // hover มุมลิงก์เฉพาะช่อง (cell-link 3C) → popup บอกว่าผูกกับรหัส/ฟิลด์อะไร
+      var clCorner = e.target.closest('.celllink-corner');
+      if (clCorner && window.DBX) {
+        var clTd = clCorner.closest('td.sg-c');
+        if (clTd) {
+          var clR = +clTd.dataset.r, clC = +clTd.dataset.c;
+          var cl = doc.cellLinks && doc.cellLinks[clR] && doc.cellLinks[clR][clC];
+          if (cl) {
+            var clP = isCode13(cl.code) ? dbCache[cl.code] : null;
+            var clName = clP ? (clP.name || '') : '';
+            var clVal = (clP && cl.field != null) ? dbFieldVal(clP, cl.field) : '';
+            var clWritable = window.DBX.isWritable(cl.field);
+            var clMsg = '<div class="tipm-head">🗄️ ลิงก์เฉพาะช่องนี้</div>' +
+              '<div class="tipm-row"><b>' + esc(cl.code) + '</b>' + (clName ? ' · ' + esc(clName) : '') + '</div>' +
+              '<div class="tipm-row">' + (clWritable ? '✏️' : '🔒') + ' ' + esc(window.DBX.fieldLabel(cl.field)) +
+              (clVal !== '' ? ' = <b>' + esc(String(clVal)) + '</b>' : '') +
+              ' · ' + (clWritable ? 'เขียนได้' : 'อ่านอย่างเดียว') + '</div>';
+            showLinkTip(clTd, clMsg, false, true); linkTipShown = true; return;
+          }
+        }
+      }
+      var g0 = e.target.closest('td.sg-g');
+      var gr0 = g0 ? +g0.dataset.gr : -1;
+      var lnk0 = g0 && rowCode(gr0);
+      var gLocked = g0 && view.mode === 'admin' && doc.adminRows && doc.adminRows[gr0];
+      if (lnk0 || gLocked) {
+        var gmsg = lnk0 ? (rowLinkLabel(gr0).indexOf('⚠️') === 0 ? rowLinkLabel(gr0) : '🔗 ' + rowLinkLabel(gr0)) : ('แถว ' + (gr0 + 1));
+        if (gLocked) gmsg += ' · ' + lockDesc();
+        showLinkTip(g0, gmsg, lnk0 && (rowLinkStatus(gr0) === 'missing' || rowLinkStatus(gr0) === 'inactive'));
+        linkTipShown = true;
+      } else if (linkTipShown) { hideTip(); linkTipShown = false; }
+    }
     if (rz) { moveRz(e.clientX, e.clientY); return; }
     if (!drag) return;
     if (drag === 'head') { var h = e.target.closest('th.sg-h'); if (h) { sel.c = +h.dataset.hc; paintSel(); } return; }
@@ -1657,7 +2448,7 @@
     if (e.target.classList.contains('sg-rzc')) { autofitCol(+e.target.dataset.rz); return; }
     if (e.target.classList.contains('sg-rzr')) { pushUndo(); delete doc.rowH[+e.target.dataset.rzr]; afterChange(); toast('คืนความสูงปกติ'); return; }
     var td = e.target.closest('td.sg-c'); if (!td) return;
-    setActive(+td.dataset.r, +td.dataset.c);
+    setActive(+td.dataset.r, +td.dataset.c, false, true);
     startEdit(null);
   }
 
@@ -1703,10 +2494,19 @@
     rootEl.addEventListener('keydown', onKey);
     rootEl.addEventListener('mousedown', onMouseDown);
     rootEl.addEventListener('mousemove', onMouseMove);
+    rootEl.addEventListener('mouseleave', function () { if (linkTipShown) { hideTip(); linkTipShown = false; } });
     document.addEventListener('mouseup', onMouseUp);
     rootEl.addEventListener('dblclick', onDblClick);
-    rootEl.addEventListener('contextmenu', function (e) { e.preventDefault(); openCtx(e.clientX, e.clientY); });
-    document.addEventListener('mousedown', function (e) { var t = e.target && e.target.closest ? e.target : null; if (!t) return; if (!t.closest('.sg-ctx')) closeCtx(); if (!t.closest('.sg-pricepop') && !t.closest('td.pclick')) hidePricePop(); });
+    rootEl.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      // คลิกขวาหัวคอลัมน์ (admin) → เมนูผูกฟิลด์ DB
+      var hh = e.target.closest('th.sg-h');
+      if (hh && view.mode === 'admin' && window.DBX) { closeCtx(); openColBind(+hh.dataset.hc); return; }
+      var scc = e.target.closest('td.sg-statuscell');
+      if (scc && view.mode === 'admin' && window.DBX) { closeCtx(); openStatusMenu(+scc.dataset.r, +scc.dataset.c, e.clientX, e.clientY); return; }
+      openCtx(e.clientX, e.clientY);
+    });
+    document.addEventListener('mousedown', function (e) { var t = e.target && e.target.closest ? e.target : null; if (!t) return; if (!t.closest('.sg-ctx')) closeCtx(); if (detailEl && !t.closest('.sg-detail') && !t.closest('td.sg-statuscell')) detailEl.style.display = 'none'; if (statusMenuEl && !t.closest('.sg-statusmenu') && !t.closest('td.sg-statuscell')) statusMenuEl.style.display = 'none'; if (colBindEl && !t.closest('.sg-colbind') && !t.closest('th.sg-h') && !t.closest('.cb-flyout')) { colBindEl.style.display = 'none'; closeCbFlyout(); if (window.PopupStack) PopupStack.remove(colBindEl); } if (!t.closest('.sg-pricepop') && !t.closest('td.pclick')) hidePricePop(); });
     // Esc ที่ไหนก็ได้ (แม้โฟกัสไม่อยู่ที่ตาราง): ยกเลิกคัดลอก/ตัด · ปิดเมนู · ปิดป๊อปอัพต่างๆ
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
@@ -1832,7 +2632,8 @@
     insertCopiedRows: insertCopiedRows, insertCopiedCols: insertCopiedCols, fillDown: fillDown, fillRight: fillRight,
     addModelRow: addModelRow, addSizeGroup: addSizeGroup, delSizeGroup: delSizeGroup,
     toggleMerge: toggleMerge, applyStyle: applyStyle, applyBorders: applyBorders, setBorderOpts: setBorderOpts, setType: setType, linkDB: linkDB, stepFont: stepFont, setFontSize: setFontSize, stepDp: stepDp,
-    linkRowDB: linkRowDB, unlinkRow: unlinkRow, syncToDB: syncToDB,
+    bindColumn: bindColumn, openColBind: openColBind, applyColMapTemplate: applyColMapTemplate, getColumnMap: function () { return doc.columnMap || {}; }, clearDbCache: clearDbCache,
+    linkRowDB: linkRowDB, unlinkRow: unlinkRow, linkCellDB: linkCellDB, unlinkCell: unlinkCell, syncToDB: syncToDB,
     setSchedule: setSchedule, setRowSchedule: setRowSchedule, getSchedule: function () { return doc.schedule || ''; },
     setFilter: setFilter, clearFilter: clearFilter, filterOptions: filterOptions, getMatchCount: function () { return lastMatchCount; }, isTooMany: function () { return tooMany; },
     setCondColors: setCondColors, getCondColors: function () { return doc.condColors || { pos: '008000', neg: 'C00000' }; },
