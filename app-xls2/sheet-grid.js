@@ -20,8 +20,8 @@
   function key(r, c) { return r + ':' + c; }
   function cellAt(r, c) { return doc.cells[key(r, c)] || null; }
   function ensureCell(r, c) { var k = key(r, c); if (!doc.cells[k]) doc.cells[k] = { v: '', t: 'auto', s: {} }; return doc.cells[k]; }
-  function snapshot() { return JSON.stringify({ cells: doc.cells, merges: doc.merges, colW: doc.colW, rowH: doc.rowH, nRows: doc.nRows, nCols: doc.nCols, adminRows: doc.adminRows, adminCols: doc.adminCols, name: doc.name, rowLinks: doc.rowLinks, condColors: doc.condColors, schedule: doc.schedule, rowSchedules: doc.rowSchedules, changes: doc.changes, images: doc.images || [], hideRows: doc.hideRows, hideCols: doc.hideCols, uHideRows: doc.uHideRows, uHideCols: doc.uHideCols }); }
-  function restore(s) { var d = JSON.parse(s); doc.cells = d.cells; doc.merges = d.merges; doc.colW = d.colW; doc.rowH = d.rowH; doc.nRows = d.nRows; doc.nCols = d.nCols; doc.adminRows = d.adminRows; doc.adminCols = d.adminCols; doc.name = d.name; doc.rowLinks = d.rowLinks || {}; doc.condColors = d.condColors; doc.schedule = d.schedule; doc.rowSchedules = d.rowSchedules || {}; doc.changes = d.changes || {}; doc.images = d.images || []; doc.hideRows = d.hideRows || {}; doc.hideCols = d.hideCols || {}; doc.uHideRows = d.uHideRows || {}; doc.uHideCols = d.uHideCols || {}; }
+  function snapshot() { return JSON.stringify({ cells: doc.cells, merges: doc.merges, colW: doc.colW, rowH: doc.rowH, nRows: doc.nRows, nCols: doc.nCols, adminRows: doc.adminRows, adminCols: doc.adminCols, name: doc.name, rowLinks: doc.rowLinks, condColors: doc.condColors, schedule: doc.schedule, rowSchedules: doc.rowSchedules, changes: doc.changes, images: doc.images || [], hideRows: doc.hideRows, hideCols: doc.hideCols, uHideRows: doc.uHideRows, uHideCols: doc.uHideCols, sizeCol: doc.sizeCol }); }
+  function restore(s) { var d = JSON.parse(s); doc.cells = d.cells; doc.merges = d.merges; doc.colW = d.colW; doc.rowH = d.rowH; doc.nRows = d.nRows; doc.nCols = d.nCols; doc.adminRows = d.adminRows; doc.adminCols = d.adminCols; doc.name = d.name; doc.rowLinks = d.rowLinks || {}; doc.condColors = d.condColors; doc.schedule = d.schedule; doc.rowSchedules = d.rowSchedules || {}; doc.changes = d.changes || {}; doc.images = d.images || []; doc.hideRows = d.hideRows || {}; doc.hideCols = d.hideCols || {}; doc.uHideRows = d.uHideRows || {}; doc.uHideCols = d.uHideCols || {}; doc.sizeCol = (d.sizeCol != null ? d.sizeCol : 0); }
   function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 80) undoStack.shift(); redoStack.length = 0; }
   function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); afterChange(); toast('ย้อนกลับ'); }
   function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); afterChange(); toast('ทำซ้ำ'); }
@@ -444,7 +444,8 @@
     if (v0 === 'ขนาด') return 'head';
     return 'data';
   }
-  function rowSizeText(r) { var a = anchorOf(r, 0); return String(valueOf(a.r, 0)).split('\n')[0].trim(); }
+  function sizeCol() { return (doc && doc.sizeCol != null) ? (doc.sizeCol | 0) : 0; }   // คอลัมน์ "ขนาด" หลัก (ตั้งได้ · ค่าเริ่มต้น A=0)
+  function rowSizeText(r) { var sc = sizeCol(); var a = anchorOf(r, sc); return String(valueOf(a.r, sc)).split('\n')[0].trim(); }
   // แยกส่วนขนาดยาง: 205/75R14C → {w:205, series:'75', rim:'14'} · 185R14C → {w:185, series:'', rim:'14'}
   function parseSizeStr(t) {
     var m = /(\d{3})(?:\/(\d{2,3}))?\s*R\s*(\d{2})/i.exec(String(t || ''));
@@ -465,6 +466,25 @@
       if (m2) return parseFloat(m2[1]);
     }
     return null;
+  }
+  // ความสูงยาง (เส้นผ่านศูนย์กลางรวม) → {cm, inch} · ใช้ค่าที่บันทึกไว้ก่อน ไม่มีค่อยคำนวณจากขนาด
+  function tireHeight(r) {
+    var sizeText = rowSizeText(r);
+    var stored = rowDiaCm(r);                                  // ค่าที่บันทึกไว้ "( 65.2 cm )"
+    var cm = null, approx = false, wCm = null, wIn = null;
+    var sz = parseSizeStr(sizeText);
+    if (sz) {
+      var w = parseInt(sz.w, 10), rim = parseInt(sz.rim, 10);
+      var ar = sz.series ? parseInt(sz.series, 10) : 80; approx = !sz.series;   // ไม่ระบุซีรีส์ = ประมาณ 80
+      if (w && rim) cm = (rim * 25.4 + 2 * w * ar / 100) / 10;               // เส้นผ่าศูนย์กลาง = ขอบล้อ + 2×แก้มยาง
+      if (w) { wCm = w / 10; wIn = w / 25.4; }                                // หน้ากว้าง (มม.→ซม./นิ้ว)
+    } else {
+      var fl = /(\d{2}(?:\.\d+)?)\s*[xX]\s*(\d{1,2}(?:\.\d+)?)/.exec(sizeText);   // ยางบอลลูน (flotation): 31x10.5R15 → สูง 31 นิ้ว · กว้าง 10.5 นิ้ว
+      if (fl) { cm = parseFloat(fl[1]) * 2.54; wIn = parseFloat(fl[2]); wCm = wIn * 2.54; }
+    }
+    var useCm = (stored != null && !isNaN(stored)) ? stored : cm;
+    if (useCm == null || isNaN(useCm)) return null;
+    return { cm: useCm, inch: useCm / 2.54, widthCm: wCm, widthIn: wIn, stored: (stored != null && !isNaN(stored)), approx: (stored == null && approx), sizeText: sizeText };
   }
   function rowText(r) {
     var out = [rowSizeText(r)];
@@ -566,6 +586,7 @@
     if (!cache) cache = {};
     if (!doc.hideRows) doc.hideRows = {}; if (!doc.hideCols) doc.hideCols = {};
     if (!doc.uHideRows) doc.uHideRows = {}; if (!doc.uHideCols) doc.uHideCols = {};
+    if (doc.sizeCol == null) doc.sizeCol = 0;
     uiDark = !!(document.body && document.body.classList.contains('dark'));
     var isAdmin = view.mode === 'admin';
     var rowVis = computeRowVis();
@@ -583,14 +604,16 @@
       var lockC = doc.adminCols && doc.adminCols[c2];
       var cmB = isAdmin && doc.columnMap && doc.columnMap[c2];
       var isStatusCol = isAdmin && doc.statusCol === c2;
+      var isSizeCol = isAdmin && sizeCol() === c2;
       var hicons = [];
       if (isStatusCol) hicons.push(['📊', 'คอลัมน์สถานะ', 'c-tr']);
       else if (cmB) hicons.push([(cmB.mode === 'write' ? '✏️' : '🔗'), 'ผูก DB: ' + (window.DBX ? window.DBX.fieldLabel(cmB.field) : cmB.field) + (cmB.mode === 'write' ? ' · เขียนได้' : ' · อ่านอย่างเดียว'), '']);
+      if (isSizeCol) hicons.push(['📏', 'คอลัมน์ขนาดหลัก (ใช้ตอนเพิ่มขนาด/รุ่น)', 'c-tl']);
       // ไอคอนทั่วไปใช้ 3 มุม: ขวาบน → ซ้ายบน → ซ้ายล่าง (ห้ามใช้ขวาล่าง)
       var HC3 = ['c-tr', 'c-tl', 'c-bl'], gi = 0;
       var marks = hicons.map(function (o) { return '<span class="sg-cic ' + (o[2] || HC3[gi++]) + '" title="' + esc(o[1]) + '">' + o[0] + '</span>'; }).join('');
       if (lockC && isAdmin) marks += '<span class="sg-cic c-br sg-lockic" title="' + esc(lockGlyph() + ' ' + lockDesc()) + '">' + lockGlyph() + '</span>';   // แม่กุญแจ มุมขวาล่าง
-      html += '<th class="sg-h' + (lockC && isAdmin ? ' lockh' : '') + (cmB || isStatusCol ? ' cmbound' : '') + '" data-hc="' + c2 + '">' + '<span class="sg-hname">' + XL2.colName(c2) + '</span>' + marks +
+      html += '<th class="sg-h' + (lockC && isAdmin ? ' lockh' : '') + (cmB || isStatusCol || isSizeCol ? ' cmbound' : '') + '" data-hc="' + c2 + '">' + '<span class="sg-hname">' + XL2.colName(c2) + '</span>' + marks +
         (isAdmin ? '<span class="sg-rzc" data-rz="' + c2 + '"></span>' + (c2 > 0 ? '<span class="sg-rzc sg-rzc-l" data-rz="' + (c2 - 1) + '"></span>' : '') : '') + '</th>';
     }
     html += '</tr>';
@@ -744,6 +767,7 @@
     var cl3c = doc.cellLinks && doc.cellLinks[r] && doc.cellLinks[r][c];
     var cellMark = cl3c ? '<span class="celllink-corner"></span>' : '';
     if (cl3c) cls += ' celllinked';
+    if (c === sizeCol() && window.ProductInfo && ProductInfo.isComplete(rowSizeText(r))) cellMark += '<span class="sg-pi-done" title="ข้อมูลขนาด/ชนิดครบ"></span>';
     // คอลัมน์สถานะ: แสดงจุดสี/ไอคอนแทนค่า (เฉพาะแถวที่ลิงก์ DB)
     if (doc.statusCol === c && window.DBX && rowCode(r)) {
       var stInner = statusCellInner(r);
@@ -905,6 +929,7 @@
   function startEdit(initial, viaFx) {
     if (view.mode !== 'admin') { toast('มุมมองผู้ใช้ — อ่านอย่างเดียว'); return; }
     var a = anchorOf(sel.r, sel.c);
+    hideSizePop();
     editing = { r: a.r, c: a.c, viaFx: !!viaFx };
     var el = cellEl(a.r, a.c);
     if (el && !viaFx) {
@@ -1217,13 +1242,16 @@
 
   // ---------- เพิ่มขนาด/เพิ่มรุ่น (เหมือน v1) ----------
   function sizeGroupOf(r) {
-    var a = anchorOf(r, 0);
-    var m = doc.merges[a.r + ':0'];
+    var sc = sizeCol();
+    var a = anchorOf(r, sc);
+    var m = doc.merges[a.r + ':' + sc];
     if (m && m.cs !== 1) m = null;   // ผสานแนวนอน (หัวตาราง/แถบ) ไม่ใช่กลุ่มขนาด
     return { top: a.r, n: m ? m.rs : 1, hasMerge: !!m };
   }
   function copyRowPattern(srcR, dstR) {
-    for (var c = 1; c < doc.nCols; c++) {
+    var sc = sizeCol();
+    for (var c = 0; c < doc.nCols; c++) {
+      if (c === sc) continue;
       var src = cellAt(srcR, c);
       if (!src) continue;
       var nc = ensureCell(dstR, c);
@@ -1241,10 +1269,10 @@
     insertRow(at, true);
     copyRowPattern(r, at);
     // ให้แถวใหม่อยู่ในกลุ่มขนาดเดียวกัน (ขยายผสานคอลัมน์ A)
-    var mk = g.top + ':0', m = g.hasMerge ? doc.merges[mk] : null;
+    var mk = g.top + ':' + sizeCol(), m = g.hasMerge ? doc.merges[mk] : null;
     if (m) { if (at >= g.top + m.rs) m.rs++; }
     else { doc.merges[mk] = { rs: at - g.top + 1, cs: 1 }; }
-    delete doc.cells[at + ':0'];
+    delete doc.cells[at + ':' + sizeCol()];
     afterChange();
     setActive(at, 2);
     toast('เพิ่มรุ่นใหม่ในกลุ่มขนาดเดิม — พิมพ์ยี่ห้อ/รุ่น/ราคาได้เลย');
@@ -1257,15 +1285,23 @@
     var tpl = at - 1;                // แถวสุดท้ายของกลุ่มเดิมเป็นต้นแบบ
     insertRow(at, true);
     copyRowPattern(tpl, at);
-    doc.cells[at + ':0'] = { v: 'ขนาดใหม่', t: 'text', s: { bg: 'F2F2F2', fc: '0000FF', b: 1, al: 'center' } };
+    var _sc = sizeCol();
+    doc.cells[at + ':' + _sc] = { v: 'ขนาดใหม่', t: 'text', s: { bg: 'F2F2F2', fc: '0000FF', b: 1, al: 'center' } };
     afterChange();
-    setActive(at, 0);
+    setActive(at, _sc);
     toast('เพิ่มขนาดใหม่แล้ว — กด Enter พิมพ์ขนาดยาง');
+  }
+  function toggleSizeCol(col) {
+    if (view.mode !== 'admin') return;
+    pushUndo();
+    doc.sizeCol = (sizeCol() === col) ? 0 : col;
+    invalidate(); afterChange();
+    toast(doc.sizeCol === col ? ('📏 ตั้งคอลัมน์ ' + XL2.colName(col) + ' เป็นคอลัมน์ขนาดหลัก') : ('ยกเลิก — คอลัมน์ขนาดหลักกลับเป็น ' + XL2.colName(0)));
   }
   function delSizeGroup() {
     if (view.mode !== 'admin') return;
     var g = sizeGroupOf(sel.r);
-    var szCell = cellAt(g.top, 0);
+    var szCell = cellAt(g.top, sizeCol());
     if (!confirm('ลบขนาด “' + (szCell ? String(szCell.v || valueOf(g.top, 0)).split('\n')[0] : '') + '” ทั้งกลุ่ม (' + g.n + ' แถว)?')) return;
     sel.ar = g.top; sel.r = g.top + g.n - 1; sel.ac = 0; sel.c = doc.nCols - 1;
     deleteRow();
@@ -1453,6 +1489,7 @@
     if (cur) { var cf = window.DBX.allFields().find(function (x) { return x.key === cur.field; }); curGroup = cf ? cf.group : null; }
     // รายการหมวด (กระชับ) — แต่ละหมวดมี flyout รายละเอียดออกข้าง
     var cats = '<div class="cb-cat cb-special' + (isStatus ? ' on' : '') + '" data-special="status"><span class="cb-ic">📊</span><span class="cb-cat-name">คอลัมน์สถานะ (จุดสี/ไอคอน)</span></div>';
+    cats += '<div class="cb-cat cb-special' + (sizeCol() === col ? ' on' : '') + '" data-special="size"><span class="cb-ic">📏</span><span class="cb-cat-name">คอลัมน์ขนาดหลัก (ใช้ตอนเพิ่มขนาด/รุ่น)</span></div>';
     cats += groups.map(function (g) {
       var fields = window.DBX.fieldsInGroup(g, true);
       if (!fields.length) return '';   // ซ่อนหมวดที่ไม่มีฟิลด์เปิดใช้งาน
@@ -1481,7 +1518,7 @@
     var cs = colBindEl.querySelector('.cb-cats');
     cs.onclick = function (e) {
       var sp = e.target.closest('[data-special]');
-      if (sp) { toggleStatusCol(col); closeCB(); return; }
+      if (sp) { if (sp.dataset.special === 'size') toggleSizeCol(col); else toggleStatusCol(col); closeCB(); return; }
       var cat = e.target.closest('.cb-cat[data-group]'); if (!cat) return;
       openCbFlyout(col, cat.dataset.group, cat, cur, closeCB);
     };
@@ -2212,6 +2249,36 @@
   }
   function hidePricePop() { if (popEl2) { popEl2.style.display = 'none'; if (window.PopupStack) PopupStack.remove(popEl2); } }
 
+  // ---------- ป๊อปอัปความสูงยาง (คลิกช่องขนาด) ----------
+  var sizePopEl = null;
+  function hideSizePop() { if (sizePopEl) { sizePopEl.style.display = 'none'; if (window.PopupStack) PopupStack.remove(sizePopEl); } }
+  function showSizePop(td, h) {
+    var dk = !!(document.body && document.body.classList.contains('dark'));
+    if (!sizePopEl) { sizePopEl = document.createElement('div'); sizePopEl.className = 'sg-sizepop'; document.body.appendChild(sizePopEl); }
+    sizePopEl.style.cssText = 'position:fixed;z-index:9500;border:1.5px solid #F47C20;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:11px 14px;font-family:Arial,Tahoma,sans-serif;min-width:172px;background:' + (dk ? '#2a2a2a' : '#fff') + ';';
+    var cm = Math.round(h.cm * 10) / 10, inch = Math.round(h.inch * 10) / 10;
+    var wCm = (h.widthCm != null) ? Math.round(h.widthCm * 10) / 10 : null;
+    var wIn = (h.widthIn != null) ? Math.round(h.widthIn * 10) / 10 : null;
+    var numCol = dk ? '#f0f0f0' : '#222';
+    var note = h.stored ? 'ความสูงจากค่าที่บันทึกไว้ · กว้างคำนวณจากขนาด' : (h.approx ? '≈ คำนวณ (อนุมานซีรีส์ 80)' : 'คำนวณจากขนาด');
+    function pair(cmv, inv) {
+      return '<div style="display:flex;gap:12px;align-items:baseline;">' +
+        '<div><span style="font:800 19px/1 inherit;color:' + numCol + ';">' + cmv + '</span> <span style="font-size:12px;color:#888;">ซม.</span></div>' +
+        '<div style="color:#ccc;">·</div>' +
+        '<div><span style="font:800 19px/1 inherit;color:' + numCol + ';">' + inv + '</span> <span style="font-size:12px;color:#888;">นิ้ว</span></div></div>';
+    }
+    sizePopEl.innerHTML =
+      '<div style="font:800 13px/1.2 inherit;color:#C75B00;margin-bottom:6px;">🛞 ' + esc(h.sizeText) + '</div>' +
+      '<div style="font-size:11px;color:#999;margin-bottom:2px;">ความสูง (เส้นผ่าศูนย์กลางรวม)</div>' + pair(cm, inch) +
+      (wCm != null ? '<div style="font-size:11px;color:#999;margin:8px 0 2px;">หน้ากว้าง (หน้ายาง)</div>' + pair(wCm, wIn) : '') +
+      '<div style="font-size:10.5px;color:#bbb;margin-top:8px;">' + esc(note) + '</div>';
+    sizePopEl.style.display = 'block';
+    var rc = td.getBoundingClientRect();
+    sizePopEl.style.left = Math.max(8, Math.min(rc.right + 6, window.innerWidth - sizePopEl.offsetWidth - 12)) + 'px';
+    sizePopEl.style.top = Math.max(8, Math.min(rc.top, window.innerHeight - sizePopEl.offsetHeight - 12)) + 'px';
+    if (window.PopupStack) PopupStack.push(sizePopEl, hideSizePop);
+  }
+
   // ---------- fill down / right (Ctrl+D / Ctrl+R แบบ Excel) ----------
   function fillDown() {
     if (view.mode !== 'admin') return;
@@ -2434,9 +2501,16 @@
     if (e.button === 0 && window.DOT && doc.columnMap && doc.columnMap[+td.dataset.c] && doc.columnMap[+td.dataset.c].field === 'dotRange') {
       var _dr = +td.dataset.r, _dcode = rowCode(_dr), _dp = _dcode ? dbCache[_dcode] : null;
       if (_dp && DOT.shouldPopup(_dp)) {
-        if (DOT.openPricePopup(_dp, td, view.mode, { retail: valueOf(_dr, 7), b: valueOf(_dr, 13), a: valueOf(_dr, 16), s: valueOf(_dr, 19) })) { rootEl.focus(); return; }
+        var _pv = function (cc) { try { var v = valueOf(_dr, cc); return (window.XL2 && XL2.isNumeric(v)) ? XL2.toN(v) : ''; } catch (e2) { return ''; } };
+        if (DOT.openPricePopup(_dp, td, view.mode, { retail: _pv(7), b: _pv(13), a: _pv(16), s: _pv(19) })) { rootEl.focus(); return; }
       }
     }
+    // คลิกช่อง "ขนาด" (คอลัมน์ขนาดหลัก) → ป๊อปความสูงยาง cm + นิ้ว (ไม่บล็อกการเลือก/แก้ไข)
+    if (e.button === 0 && +td.dataset.c === sizeCol()) {
+      var _szt = rowSizeText(+td.dataset.r);
+      if (_szt && window.ProductInfo) ProductInfo.showPopup(_szt, td, { isAdmin: view.mode === 'admin', onChange: function () { invalidate(); render(); } });
+      else hideSizePop();
+    } else { hideSizePop(); if (window.ProductInfo) ProductInfo.close(); }
     if ((view.mode === 'user' && td.classList.contains('pclick')) || (PRICE_NAME[+td.dataset.c] && rowCode(+td.dataset.r))) {
       showPricePop(+td.dataset.r, +td.dataset.c, td);
     } else hidePricePop();
@@ -2744,6 +2818,7 @@
     hideRows: hideRows, unhideRows: unhideRows, hideCols: hideCols, unhideCols: unhideCols, showAllHidden: showAllHidden,
     toggleUserHideRows: toggleUserHideRows, toggleUserHideCols: toggleUserHideCols,
     setMode: setMode, getMode: function () { return view.mode; },
+    allSizes: function () { var s = {}, out = []; for (var r = 0; r < doc.nRows; r++) { if (rowKind(r) !== 'data') continue; var t = rowSizeText(r); if (t && t !== 'ขนาดใหม่' && !s[t]) { s[t] = 1; out.push(t); } } return out; },
     setZoom: setZoom, getZoom: function () { return view.zoom; }, toggleSecret: toggleSecret,
     saveAs: saveAs, save: save, openVersion: openVersion, resetFromSource: resetFromSource,
     getDoc: function () { return doc; }, isDirty: function () { return dirty; },

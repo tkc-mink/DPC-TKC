@@ -10,7 +10,7 @@
     ['ซ่อน / ล็อก', ['btnLockRow', 'btnLockCol', 'btnSecret']],
     ['มุมมอง', ['btnMode', 'btnTheme', 'btnKeys']],
     ['รูปภาพ', ['btnImgAdd', 'btnImgSearch']],
-    ['เชื่อมต่อ', ['btnApi', 'btnStaging', 'btnAudit', 'btnUsers']]
+    ['เชื่อมต่อ', ['btnApi', 'btnStaging', 'btnAudit', 'btnUsers', 'btnDeviceReg']]
   ];
   function moreCatOf(id) { for (var i = 0; i < MORE_CATS.length; i++) { if (MORE_CATS[i][1].indexOf(id) >= 0) return MORE_CATS[i][0]; } return 'อื่นๆ'; }
   function updateMoreBadge() {

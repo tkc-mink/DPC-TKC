@@ -140,6 +140,7 @@
       '<button class="ac-tab" data-t="devices">📱 อุปกรณ์</button>' +
       '<button class="ac-tab" data-t="positions">🏷️ ตำแหน่ง</button>' +
       '<button class="ac-tab" data-t="assign">👥 ผูกผู้ใช้</button>' +
+      '<button class="ac-tab" data-t="prodinfo">📐 ขนาด/สินค้า</button>' +
       '</div>' +
       '<div class="ac-body" id="acBody"></div>' +
       '<div class="ac-foot"><span id="acFootMsg"></span><span></span></div>' +
@@ -155,6 +156,7 @@
   function render() {
     if (tab === 'devices') renderDevices();
     else if (tab === 'positions') renderPositions();
+    else if (tab === 'prodinfo') renderProdInfo();
     else renderAssign();
   }
 
@@ -354,6 +356,45 @@
         if (r && r.ok) { dirty = false; foot('✅ บันทึกแล้ว', 'ok'); toast('✅ บันทึกสิทธิ์ตำแหน่งขึ้น Worker'); if (window.PermEnforce) PermEnforce.refresh(); }
         else { foot('❌ ' + ((r && r.error) || 'บันทึกไม่สำเร็จ'), 'err'); if (sb) sb.disabled = false; }
       }).catch(function () { foot('❌ ต่อเซิร์ฟเวอร์ไม่ได้', 'err'); if (sb) sb.disabled = false; });
+  }
+
+  // ──────────────── แท็บ ขนาด/ชนิดสินค้า (Phase 2) ────────────────
+  function renderProdInfo() {
+    var b = body();
+    if (!window.ProductInfo) { b.innerHTML = '<div class="ac-empty">ยังไม่มีโมดูล ProductInfo</div>'; return; }
+    var sizes = (window.SG && SG.allSizes) ? SG.allSizes() : [];
+    ProductInfo.listKnown().forEach(function (n) { if (sizes.indexOf(n) < 0) sizes.push(n); });
+    sizes.sort();
+    paintProdInfo(sizes, '');
+  }
+  function paintProdInfo(sizes, q) {
+    var b = body(), PI = window.ProductInfo, TY = PI.TYPES;
+    q = (q || '').trim().toLowerCase();
+    var filtered = q ? sizes.filter(function (s) { return s.toLowerCase().indexOf(q) >= 0; }) : sizes;
+    var done = sizes.filter(function (s) { return PI.isComplete(s); }).length;
+    var rows = filtered.slice(0, 400).map(function (s) {
+      var info = PI.get(s), td = info.typeDef, detail;
+      if (td.dims) detail = info.dims ? (Math.round(info.dims.hCm * 10) / 10 + ' × ' + (info.dims.wCm != null ? Math.round(info.dims.wCm * 10) / 10 : '—') + ' ซม.' + (info.approx ? ' ≈' : '')) : '<span style="color:#C0392B;">— ยังไม่มี —</span>';
+      else { var fs = (td.fields || []).map(function (f) { var v = info.fields && info.fields[f.k]; return v ? esc(v) : null; }).filter(Boolean); detail = fs.length ? fs.join(' · ') : '<span style="color:#C0392B;">— ยังไม่มี —</span>'; }
+      var alias = info.aliases.length ? ' <span style="font-size:10px;color:#aaa;">(' + esc(info.aliases.join(',')) + ')</span>' : '';
+      return '<tr><td><b>' + esc(info.name) + '</b>' + alias + '</td>' +
+        '<td><select class="ac-pi-type" data-sz="' + esc(s) + '">' + PI.TYPE_ORDER.map(function (t) { return '<option value="' + t + '"' + (t === info.type ? ' selected' : '') + '>' + TY[t].icon + ' ' + TY[t].label + '</option>'; }).join('') + '</select></td>' +
+        '<td>' + detail + '</td><td>' + (info.complete ? '<span style="color:#1F8A4C;">●</span>' : '<span style="color:#ddd;">○</span>') + '</td>' +
+        '<td><button class="ac-btn sm ac-pi-edit" data-sz="' + esc(s) + '">แก้</button></td></tr>';
+    }).join('');
+    b.innerHTML =
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">' +
+      '<input class="ac-in" id="acPiSearch" placeholder="🔍 ค้นหาขนาด…" style="flex:1;min-width:170px;height:36px;" value="' + esc(q) + '">' +
+      '<button class="ac-btn gho sm" id="acPiPull">⬇️ ดึงส่วนกลาง</button>' +
+      '<button class="ac-btn sm" id="acPiPush">⬆️ บันทึกขึ้นส่วนกลาง</button></div>' +
+      '<div class="ac-sec" style="margin:0 0 8px;">รวม ' + sizes.length + ' ขนาด · ครบ ' + done + ' · แสดง ' + Math.min(filtered.length, 400) + (filtered.length > 400 ? ' (จาก ' + filtered.length + ' — พิมพ์ค้นเพื่อแคบลง)' : '') + '</div>' +
+      '<table class="ac-tbl"><thead><tr><th>ขนาด</th><th>ชนิด</th><th>สูง × กว้าง / รายละเอียด</th><th>ครบ</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="ac-empty">— ไม่พบ —</td></tr>') + '</tbody></table>';
+    var sb = b.querySelector('#acPiSearch');
+    sb.oninput = function () { var v = this.value, pos = this.selectionStart; paintProdInfo(sizes, v); var s2 = body().querySelector('#acPiSearch'); if (s2) { s2.focus(); try { s2.setSelectionRange(pos, pos); } catch (e) {} } };
+    b.querySelectorAll('.ac-pi-type').forEach(function (sel) { sel.onchange = function () { PI.setType(sel.dataset.sz, sel.value); paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); }; });
+    b.querySelectorAll('.ac-pi-edit').forEach(function (btn) { btn.onclick = function () { PI.showPopup(btn.dataset.sz, btn, { isAdmin: true, onChange: function () { paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); } }); }; });
+    b.querySelector('#acPiPull').onclick = function () { foot('กำลังดึง…'); PI.syncPull().then(function (ok) { foot(ok ? '✅ ดึงข้อมูลส่วนกลางแล้ว' : '❌ ดึงไม่สำเร็จ', ok ? 'ok' : 'err'); paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); }); };
+    b.querySelector('#acPiPush').onclick = function () { foot('กำลังบันทึก…'); PI.syncPush(adminKey, (window.Auth && Auth.currentUser && Auth.currentUser()) || 'admin').then(function (r) { foot(r && r.ok ? '✅ บันทึกขึ้นส่วนกลางแล้ว' : '❌ ' + ((r && r.error) || 'ไม่สำเร็จ'), r && r.ok ? 'ok' : 'err'); }); };
   }
 
   // ──────────────── คลิกขวาแถว → ซ่อนแถวนี้สำหรับตำแหน่ง (quick-add rule) ────────────────

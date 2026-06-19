@@ -113,7 +113,10 @@
     },
 
     openRegister: openRegister,
-    openConfig: openConfig
+    openConfig: openConfig,
+    // ── ข้อมูลขนาด/ชนิดสินค้า (ความสูง/กว้าง/alias) เก็บกลาง ──
+    prodInfoGet: function () { return call('PRODINFO_GET', {}); },
+    prodInfoSet: function (adminKey, data, by) { return call('PRODINFO_SET', { adminKey: adminKey, data: data, by: by || '', deviceId: deviceId() }); }
   };
   window.Registry = Registry;
 
@@ -287,21 +290,22 @@
 
   // ════════════════ chip มุมล่างขวา (เชิญลงทะเบียน ตอนยังไม่ได้ทำ และไม่ได้บังคับ) ════════════════
   var chip = null;
+  // ปุ่ม "ลงทะเบียนอุปกรณ์" ย้ายเข้าเมนู ⋯ (#btnDeviceReg) แทน chip ลอยมุมล่างขวา (ไม่ได้ใช้บ่อย)
   function refreshChip() {
-    if (chip) { chip.remove(); chip = null; }
-    if (Registry.isRegistered() || enforce()) return;   // ลงแล้ว/บังคับอยู่ = ไม่ต้องโชว์ chip เชิญ
-    injectCss();
-    chip = document.createElement('button'); chip.className = 'reg-chip';
-    chip.innerHTML = '📱 ลงทะเบียนอุปกรณ์';
-    chip.title = 'ลงทะเบียนเครื่องนี้กับทะเบียนกลาง (คลิกขวา = ตั้งค่า)';
-    chip.onclick = function () { openRegister({ onDone: refreshChip }); };
-    chip.oncontextmenu = function (e) { e.preventDefault(); openConfig(); };
-    document.body.appendChild(chip);
+    if (chip) { chip.remove(); chip = null; }            // เก็บ chip ลอยเดิมทิ้ง (ถ้ามี)
+    var btn = document.getElementById('btnDeviceReg');
+    if (!btn) return;
+    var reg = Registry.isRegistered();
+    var tx = btn.querySelector('.tx'); if (tx) tx.textContent = reg ? 'อุปกรณ์ (ลงทะเบียนแล้ว)' : 'ลงทะเบียนอุปกรณ์';
+    btn.title = reg ? 'อุปกรณ์ลงทะเบียนแล้ว — กดดูสถานะ/ตั้งค่า' : 'ลงทะเบียนเครื่องนี้กับทะเบียนกลาง';
+    btn.onclick = function () { if (Registry.isRegistered()) openConfig(); else openRegister({ onDone: refreshChip }); };
+    btn.oncontextmenu = function (e) { e.preventDefault(); openConfig(); };
   }
 
   // ════════════════ boot gate ════════════════
   function boot() {
-    if (!enforce()) { refreshChip(); return; }          // ไม่บังคับ → แค่โชว์ chip เชิญ
+    refreshChip();                                       // ผูกปุ่มในเมนู ⋯ เสมอ (เลิกใช้ chip ลอย)
+    if (!enforce()) return;                              // ไม่บังคับ → ลงทะเบียนผ่านเมนูเมื่อพร้อม
     if (!Registry.isRegistered()) { openRegister({ blocking: true, onDone: boot }); return; }
     // บังคับ + มี token → เช็คกับ server (กันเช็คซ้ำในเซสชัน)
     try { if (sessionStorage.getItem(SS_CHECKED) === '1') return; } catch (e) {}

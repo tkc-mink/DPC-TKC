@@ -140,9 +140,8 @@
     });
     return rows;
   }
-  function shouldPopup(p) {                               // > 1 ชุด (DF นับเป็น 1) → เด้ง popup
-    var n = inStockYears(p).length + (hasDF(p) ? 1 : 0);
-    return n > 1;
+  function shouldPopup(p) {                               // มีแถวที่จะแสดงใน popup ≥ 1 → เด้ง (ครอบคลุม DF เดี่ยว / ปีเดียวที่ไม่ใช่ปีปัจจุบัน)
+    return popupRows(p).length > 0;
   }
 
   var FIELDS = [['retail', 'ขาย'], ['b', 'B'], ['a', 'A'], ['s', 'S']];
