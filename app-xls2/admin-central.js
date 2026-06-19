@@ -368,7 +368,7 @@
     paintProdInfo(sizes, '');
   }
   function paintProdInfo(sizes, q) {
-    var b = body(), PI = window.ProductInfo, TY = PI.TYPES;
+    var b = body(), PI = window.ProductInfo, TY = PI.getTypes();
     q = (q || '').trim().toLowerCase();
     var filtered = q ? sizes.filter(function (s) { return s.toLowerCase().indexOf(q) >= 0; }) : sizes;
     var done = sizes.filter(function (s) { return PI.isComplete(s); }).length;
@@ -378,7 +378,7 @@
       else { var fs = (td.fields || []).map(function (f) { var v = info.fields && info.fields[f.k]; return v ? esc(v) : null; }).filter(Boolean); detail = fs.length ? fs.join(' · ') : '<span style="color:#C0392B;">— ยังไม่มี —</span>'; }
       var alias = info.aliases.length ? ' <span style="font-size:10px;color:#aaa;">(' + esc(info.aliases.join(',')) + ')</span>' : '';
       return '<tr><td><b>' + esc(info.name) + '</b>' + alias + '</td>' +
-        '<td><select class="ac-pi-type" data-sz="' + esc(s) + '">' + PI.TYPE_ORDER.map(function (t) { return '<option value="' + t + '"' + (t === info.type ? ' selected' : '') + '>' + TY[t].icon + ' ' + TY[t].label + '</option>'; }).join('') + '</select></td>' +
+        '<td><select class="ac-pi-type" data-sz="' + esc(s) + '">' + PI.getTypeOrder().map(function (t) { return '<option value="' + t + '"' + (t === info.type ? ' selected' : '') + '>' + TY[t].icon + ' ' + TY[t].label + '</option>'; }).join('') + '</select></td>' +
         '<td>' + detail + '</td><td>' + (info.complete ? '<span style="color:#1F8A4C;">●</span>' : '<span style="color:#ddd;">○</span>') + '</td>' +
         '<td><button class="ac-btn sm ac-pi-edit" data-sz="' + esc(s) + '">แก้</button></td></tr>';
     }).join('');
@@ -388,6 +388,7 @@
       '<button class="ac-btn gho sm" id="acPiPull">⬇️ ดึงส่วนกลาง</button>' +
       '<button class="ac-btn sm" id="acPiPush">⬆️ บันทึกขึ้นส่วนกลาง</button></div>' +
       '<div class="ac-sec" style="margin:0 0 8px;">รวม ' + sizes.length + ' ขนาด · ครบ ' + done + ' · แสดง ' + Math.min(filtered.length, 400) + (filtered.length > 400 ? ' (จาก ' + filtered.length + ' — พิมพ์ค้นเพื่อแคบลง)' : '') + '</div>' +
+      '<div style="font-size:11.5px;color:#888;margin-bottom:10px;line-height:1.9;">ชนิดสินค้า: ' + PI.getTypeOrder().map(function (t) { var d = TY[t]; return '<span style="white-space:nowrap;">' + d.icon + esc(d.label) + (d.custom ? ' <a href="#" data-deltype="' + t + '" style="color:#C0392B;text-decoration:none;">✕</a>' : '') + '</span>'; }).join(' · ') + ' <button class="ac-btn gho sm" id="acPiAddType">➕ เพิ่มชนิด</button></div>' +
       '<table class="ac-tbl"><thead><tr><th>ขนาด</th><th>ชนิด</th><th>สูง × กว้าง / รายละเอียด</th><th>ครบ</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="ac-empty">— ไม่พบ —</td></tr>') + '</tbody></table>';
     var sb = b.querySelector('#acPiSearch');
     sb.oninput = function () { var v = this.value, pos = this.selectionStart; paintProdInfo(sizes, v); var s2 = body().querySelector('#acPiSearch'); if (s2) { s2.focus(); try { s2.setSelectionRange(pos, pos); } catch (e) {} } };
@@ -395,6 +396,15 @@
     b.querySelectorAll('.ac-pi-edit').forEach(function (btn) { btn.onclick = function () { PI.showPopup(btn.dataset.sz, btn, { isAdmin: true, onChange: function () { paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); } }); }; });
     b.querySelector('#acPiPull').onclick = function () { foot('กำลังดึง…'); PI.syncPull().then(function (ok) { foot(ok ? '✅ ดึงข้อมูลส่วนกลางแล้ว' : '❌ ดึงไม่สำเร็จ', ok ? 'ok' : 'err'); paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); }); };
     b.querySelector('#acPiPush').onclick = function () { foot('กำลังบันทึก…'); PI.syncPush(adminKey, (window.Auth && Auth.currentUser && Auth.currentUser()) || 'admin').then(function (r) { foot(r && r.ok ? '✅ บันทึกขึ้นส่วนกลางแล้ว' : '❌ ' + ((r && r.error) || 'ไม่สำเร็จ'), r && r.ok ? 'ok' : 'err'); }); };
+    var addT = b.querySelector('#acPiAddType');
+    if (addT) addT.onclick = function () {
+      var nm = prompt('ชื่อชนิดสินค้าใหม่ (เช่น น้ำยาหม้อน้ำ, จุ๊บลม)'); if (nm === null || !nm.trim()) return;
+      var ic = prompt('ไอคอน emoji (เว้นว่าง = 📦)', '📦') || '📦';
+      var fl = prompt('หัวข้อรายละเอียด คั่นด้วยจุลภาค (เช่น ปริมาตร, ชนิด, น้ำหนัก)\nเว้นว่าง = ไม่มีฟิลด์', '');
+      PI.addType(nm.trim(), ic.trim(), (fl || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean));
+      paintProdInfo(sizes, body().querySelector('#acPiSearch').value);
+    };
+    b.querySelectorAll('[data-deltype]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); if (confirm('ลบชนิดสินค้านี้? (สินค้าที่เคยตั้งชนิดนี้จะกลับเป็น “ยาง”)')) { PI.removeType(a.dataset.deltype); paintProdInfo(sizes, body().querySelector('#acPiSearch').value); if (window.SG && SG.render) SG.render(); } }; });
   }
 
   // ──────────────── คลิกขวาแถว → ซ่อนแถวนี้สำหรับตำแหน่ง (quick-add rule) ────────────────

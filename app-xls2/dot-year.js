@@ -144,7 +144,7 @@
     return popupRows(p).length > 0;
   }
 
-  var FIELDS = [['retail', 'ขาย'], ['b', 'B'], ['a', 'A'], ['s', 'S']];
+  var FIELDS = [['retail', 'ขาย', 'salePrice1'], ['b', 'B', 'salePrice2'], ['a', 'A', 'salePrice3'], ['s', 'S', 'salePrice4']];
   var popEl = null;
   function code2(n) { return (window.XL2 && XL2.dealer) ? (XL2.dealer(n) || '—') : String(n); }
   function fmt(n) { return (window.XL2 && XL2.fmtNum) ? XL2.fmtNum(n) : String(n); }
@@ -158,13 +158,16 @@
     base = base || {};
     if (!popEl) { popEl = document.createElement('div'); popEl.className = 'dotpop'; document.body.appendChild(popEl); }
     var isAdmin = mode === 'admin';
+    // ซ่อนคอลัมน์ราคาที่ตำแหน่ง user มองไม่เห็น (เช่น เห็นแค่ราคาขาย → ซ่อน B/A/S)
+    var FLD = FIELDS.filter(function (f) { return isAdmin || !(window.PermEnforce && PermEnforce.active() && PermEnforce.colHiddenField(f[2])); });
+    if (!FLD.length) FLD = [FIELDS[0]];   // กันกรณีซ่อนหมด — อย่างน้อยโชว์ราคาขาย
     var head = '<div class="dotpop-h"><span>🛞 ราคาแยกตามปียาง (DOT)</span><span class="dotpop-x">✕</span></div>' +
       '<div class="dotpop-sub">' + esc(p.name || code) + (isAdmin ? ' · กรอกเป็นตัวเลข · เก็บในเครื่อง (ไม่เขียนกลับ DB)' : ' · โค้ดราคา') + '</div>';
-    var ths = FIELDS.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('');
+    var ths = FLD.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('');
     var pw = priceWeight(), pwS = pw > 0 ? ('font-weight:' + pw + ';') : '';
     var body = rows.map(function (b, i) {
       var saved = getPrices(code, b) || {};
-      var cells = FIELDS.map(function (f) {
+      var cells = FLD.map(function (f) {
         var v = (saved[f[0]] != null && saved[f[0]] !== '') ? saved[f[0]] : (base[f[0]] != null ? base[f[0]] : '');
         var pc = get(PCOL[f[0]]);
         var num = (window.XL2 ? XL2.toN(v) : parseFloat(v)) || 0;
@@ -193,7 +196,7 @@
     if (saveBtn) saveBtn.onclick = function () {
       rows.forEach(function (b, i) {
         var vals = {};
-        FIELDS.forEach(function (f) {
+        FLD.forEach(function (f) {
           var inp = popEl.querySelector('.dotpop-in[data-row="' + i + '"][data-f="' + f[0] + '"]');
           var raw = inp ? inp.value.trim() : '';
           if (raw !== '') vals[f[0]] = (window.XL2 ? XL2.toN(raw) : parseFloat(raw)) || raw;
@@ -206,11 +209,11 @@
     };
     // คีย์บอร์ดแบบ Excel: โฟกัสช่องแรกพร้อมพิมพ์ · Enter เลื่อนซ้าย→ขวา ลงแถวใหม่ จนถึงปุ่มบันทึก · ลูกศรบังคับทิศ
     if (isAdmin) {
-      var FN = FIELDS.length, lastRC = { r: 0, c: 0 };
-      function inAt(r, c) { return popEl.querySelector('.dotpop-in[data-row="' + r + '"][data-f="' + FIELDS[c][0] + '"]'); }
+      var FN = FLD.length, lastRC = { r: 0, c: 0 };
+      function inAt(r, c) { return popEl.querySelector('.dotpop-in[data-row="' + r + '"][data-f="' + FLD[c][0] + '"]'); }
       function focusCell(r, c) { r = Math.max(0, Math.min(rows.length - 1, r)); c = Math.max(0, Math.min(FN - 1, c)); var el = inAt(r, c); if (el) { el.focus(); if (el.select) el.select(); } }
       rows.forEach(function (_b, r) {
-        FIELDS.forEach(function (f, c) {
+        FLD.forEach(function (f, c) {
           var el = inAt(r, c); if (!el) return;
           el.addEventListener('focus', function () { if (el.select) el.select(); lastRC = { r: r, c: c }; });
           el.addEventListener('blur', function () { var n = (window.XL2 ? XL2.toN(el.value) : parseFloat(el.value)); el.value = (String(el.value).trim() === '') ? '' : fmt2(n); });   // ใส่ , + 2 ทศนิยม หลังพิมพ์

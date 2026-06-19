@@ -519,6 +519,7 @@
     setAdapter: function (a) { adapter = a; },
     config: function () { return lsGet(K_CONFIG, { baseUrl: '', token: '', username: '', password: '', flag: 'PRICE', useAuth: false, adapter: 'mock', timeoutMs: 12000 }); },
     setConfig: function (o) { lsSet(K_CONFIG, Object.assign(DBX.config(), o)); },
+    _httpAdapter: HttpAdapter,   // adapter จริงที่ส่ง header Flag/Username/Password (ให้ dbx-connect ใช้แทนตัวเก่า)
     snapshotInfo: snapInfo,
     mockSeed: function () { return mockSeed; },
     remakeMock: function () { mockSeed++; adapter = MockAdapter(); return adapter; },   // สร้างชุดข้อมูลจำลองใหม่ (seed ใหม่) — ใช้ตอนกด "จำลอง"

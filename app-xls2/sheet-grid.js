@@ -520,7 +520,11 @@
       }
       if (ok && flt.brand && String(valueOf(r, 2)).trim() !== flt.brand) ok = false;
       if (ok && flt.size && rowSizeText(r) !== flt.size) ok = false;
-      if (ok && q && rowText(r).indexOf(q) < 0) ok = false;
+      if (ok && q && rowText(r).indexOf(q) < 0) {
+        var _ah = false;   // ค้นเจอผ่าน "ชื่อเรียกอื่น" (alias) เช่น พิมพ์ 15-30 → เจอแถว 18.4-30
+        if (window.ProductInfo) { try { var _al = ProductInfo.get(rowSizeText(r)).aliases || []; for (var _i = 0; _i < _al.length; _i++) { if (String(_al[_i]).toLowerCase().indexOf(q) >= 0) { _ah = true; break; } } } catch (e) {} }
+        if (!_ah) ok = false;
+      }
       if (ok && !String(valueOf(r, 2)).trim() && !rowSizeText(r)) ok = false;  // แถวเปล่าไม่ต้องโผล่
       vis[r] = ok;
       if (ok) lastMatchCount++;
@@ -532,7 +536,7 @@
       return vis;
     }
     for (var r2 = 0; r2 < doc.nRows; r2++) {
-      if (kinds[r2] === 'title' && r2 < 2) vis[r2] = true;
+      if (kinds[r2] === 'title' && r2 < 2) vis[r2] = q ? (rowText(r2).indexOf(q) >= 0) : true;   // ค้นหาอยู่ → แถวหัว (2 แถวแรก) ต้องตรงคำค้นด้วย ไม่งั้นซ่อน
       else if (kinds[r2] === 'sect' || kinds[r2] === 'head' || kinds[r2] === 'title') {
         // มองไปข้างหน้าจนจบ section
         var any = false;
@@ -2339,6 +2343,16 @@
   }
 
   // ---------- keyboard ----------
+  // เลื่อนด้วยลูกศร/Tab มาที่ช่อง "ขนาด" → เด้งป๊อปอัปข้อมูลเหมือนคลิกเมาส์ (noFocus = ไม่แย่งโฟกัส ลูกศรเลื่อนต่อได้)
+  function syncSizePopup() {
+    if (!window.ProductInfo) return;
+    if (sel.c === sizeCol() && rowKind(sel.r) === 'data') {
+      var t = rowSizeText(sel.r), a = anchorOf(sel.r, sel.c);
+      var td = rootEl.querySelector('td.sg-c[data-r="' + a.r + '"][data-c="' + a.c + '"]');
+      if (t && td) { ProductInfo.showPopup(t, td, { isAdmin: view.mode === 'admin', noFocus: true, onChange: function () { invalidate(); render(); } }); return; }
+    }
+    ProductInfo.close();
+  }
   function onKey(e) {
     if (editing && !editing.viaFx) {
       if (e.key === 'Enter') { e.preventDefault(); commitEdit(e.shiftKey ? 'up' : 'down'); }
@@ -2408,6 +2422,7 @@
       case ' ': if (e.shiftKey) { e.preventDefault(); sel.ac = 0; sel.c = doc.nCols - 1; paintSel(); break; }   // Shift+Space = ทั้งแถว
         e.preventDefault(); startEdit(' '); break;
       case 'Escape':
+        if (window.ProductInfo) ProductInfo.close();
         if (clip) { clearClip(); break; }
         if (multiCols.length || multiRows.length) { clearMulti(); break; }   // ยกเลิกการเลือกหลายคอลัมน์/แถวแบบ Ctrl ก่อน
         if (sel.r !== sel.ar || sel.c !== sel.ac) { sel.ar = sel.r; sel.ac = sel.c; paintSel(); break; }   // ยกเลิกการลากเลือกหลายช่อง → เหลือช่องเดียว
@@ -2415,6 +2430,7 @@
       default:
         if (e.key.length === 1 && !e.altKey) { e.preventDefault(); startEdit(e.key); }
     }
+    if (/^(Arrow|Tab|Home|End|Page)/.test(e.key)) syncSizePopup();
   }
 
   // ---------- mouse ----------

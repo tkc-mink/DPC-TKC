@@ -36,9 +36,19 @@
   var SEED_ALIAS = { '15-30': '18.4-30', '14-30': '16.9-30', '13-28': '14.9-28', '12-28': '13.6-28', '12-38': '13.6-38', '11-38': '12.4-38' };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function load() { try { var o = JSON.parse(localStorage.getItem(LSK) || '{}'); o.type = o.type || {}; o.dims = o.dims || {}; o.fields = o.fields || {}; o.alias = o.alias || {}; return o; } catch (e) { return { type: {}, dims: {}, fields: {}, alias: {} }; } }
+  function load() { try { var o = JSON.parse(localStorage.getItem(LSK) || '{}'); o.type = o.type || {}; o.dims = o.dims || {}; o.fields = o.fields || {}; o.alias = o.alias || {}; o.customTypes = o.customTypes || {}; return o; } catch (e) { return { type: {}, dims: {}, fields: {}, alias: {}, customTypes: {} }; } }
   function save(o) { try { localStorage.setItem(LSK, JSON.stringify(o)); } catch (e) {} }
   var store = load();
+  // ชนิดสินค้า = ในตัว + ที่แอดมินเพิ่มเอง (ขยายได้)
+  function allTypes() { var t = {}; Object.keys(TYPES).forEach(function (k) { t[k] = TYPES[k]; }); Object.keys(store.customTypes || {}).forEach(function (id) { t[id] = store.customTypes[id]; }); return t; }
+  function typeOrder() { return TYPE_ORDER.concat(Object.keys(store.customTypes || {})); }
+  function addType(label, icon, fieldLabels) {
+    var id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    var fields = (fieldLabels || []).map(function (l, i) { return { k: 'f' + i, label: String(l).trim() }; }).filter(function (f) { return f.label; });
+    store.customTypes[id] = { label: String(label || 'ชนิดใหม่').trim(), icon: icon || '📦', fields: fields, freeform: true, custom: true };
+    save(store); return id;
+  }
+  function removeType(id) { delete store.customTypes[id]; save(store); }
 
   function norm(s) { return String(s == null ? '' : s).trim().replace(/^\(\s*/, '').replace(/\s*\)$/, '').toUpperCase().replace(/\s+/g, ''); }
   function canonical(raw) { var n = norm(raw); return store.alias[n] || SEED_ALIAS[n] || n; }
@@ -75,7 +85,7 @@
   }
 
   function get(raw) {
-    var name = canonical(raw), type = store.type[name] || 'tire', td = TYPES[type] || TYPES.other;
+    var name = canonical(raw), type = store.type[name] || 'tire', TY = allTypes(), td = TY[type] || TY.other;
     var info = { name: name, raw: raw, type: type, typeDef: td, aliases: aliasesOf(name) };
     if (td.dims) {
       var ov = store.dims[name];
@@ -117,7 +127,8 @@
       '.pi-btn.pri{background:#F47C20;color:#fff;border:none;}' +
       '.pi-in{width:100%;height:34px;border:1px solid #cfcfcf;border-radius:8px;padding:0 10px;font:inherit;font-size:13px;box-sizing:border-box;margin-top:4px;background:inherit;color:inherit;}' +
       '.pi-sel{width:100%;height:34px;border:1px solid #cfcfcf;border-radius:8px;font:inherit;font-size:13px;margin-top:4px;background:inherit;color:inherit;}' +
-      '.pi-ed{margin-top:8px;}.pi-ed label{display:block;font-size:11px;color:#999;margin-top:6px;}';
+      '.pi-ed{margin-top:8px;}.pi-ed label{display:block;font-size:11px;color:#999;margin-top:6px;}' +
+      '.pi-ttl{cursor:move;}.pi-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;}.pi-chip{font-size:12px;background:#FFF3E6;border:1px solid #F0B380;color:#C75B00;border-radius:7px;padding:2px 8px;}.pi-chip a{color:#C0392B;text-decoration:none;margin-left:3px;font-weight:700;}';
     document.head.appendChild(s);
   }
 
@@ -130,7 +141,27 @@
   // ════════════ ป๊อปอัปแสดงผล (ปรับตามชนิด) ════════════
   function showPopup(raw, anchor, opts) {
     opts = opts || {}; injectCss();
-    if (!popEl) { popEl = document.createElement('div'); popEl.className = 'pi-pop'; document.body.appendChild(popEl); }
+    if (!popEl) {
+      popEl = document.createElement('div'); popEl.className = 'pi-pop'; popEl.tabIndex = -1; document.body.appendChild(popEl);
+      popEl.addEventListener('mousedown', function (e) {   // ลากหัวป๊อปเพื่อย้ายตำแหน่ง
+        var t = e.target.closest('.pi-ttl'); if (!t || e.target.closest('a,button,input,select')) return;
+        e.preventDefault();
+        var sx = e.clientX, sy = e.clientY, ol = parseFloat(popEl.style.left) || 0, ot = parseFloat(popEl.style.top) || 0;
+        function mv(ev) { popEl.style.left = Math.max(0, Math.min(ol + ev.clientX - sx, window.innerWidth - popEl.offsetWidth)) + 'px'; popEl.style.top = Math.max(0, Math.min(ot + ev.clientY - sy, window.innerHeight - popEl.offsetHeight)) + 'px'; }
+        function up() { document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); }
+        document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true);
+      });
+      popEl.onkeydown = function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }   // ESC = ปิดหน้าต่าง
+        if (e.key === 'Enter') {
+          var ins = [].slice.call(popEl.querySelectorAll('.pi-in, .pi-sel'));
+          var i = ins.indexOf(document.activeElement);
+          if (i >= 0 && i < ins.length - 1) { e.preventDefault(); var nx = ins[i + 1]; nx.focus(); if (nx.select) nx.select(); return; }   // Enter = เลื่อนช่องถัดไป
+          var btn = popEl.querySelector('#piSave') || popEl.querySelector('#piAliasOk') || popEl.querySelector('#piTypeOk');
+          if (btn) { e.preventDefault(); btn.click(); }   // Enter ช่องสุดท้าย = ผูก/บันทึก
+        }
+      };
+    }
     render(raw, opts);
     popEl.style.display = 'block';
     var rc = anchor.getBoundingClientRect();
@@ -147,7 +178,7 @@
 
     if (mode === 'editType') {
       body = '<div class="pi-lab">ชนิดสินค้า</div><select class="pi-sel" id="piType">' +
-        TYPE_ORDER.map(function (t) { return '<option value="' + t + '"' + (t === info.type ? ' selected' : '') + '>' + TYPES[t].icon + ' ' + TYPES[t].label + '</option>'; }).join('') + '</select>' +
+        typeOrder().map(function (t) { var TT = allTypes()[t]; return '<option value="' + t + '"' + (t === info.type ? ' selected' : '') + '>' + TT.icon + ' ' + esc(TT.label) + '</option>'; }).join('') + '</select>' +
         '<div class="pi-row"><button class="pi-btn pri" id="piTypeOk">ตกลง</button><button class="pi-btn" id="piBack">ยกเลิก</button></div>';
     } else if (mode === 'edit') {
       var ed = '';
@@ -161,9 +192,10 @@
       }
       body = '<div class="pi-ed">' + ed + '</div><div class="pi-row"><button class="pi-btn pri" id="piSave">บันทึก</button><button class="pi-btn" id="piBack">ยกเลิก</button></div>';
     } else if (mode === 'alias') {
-      body = '<div class="pi-lab">ผูก "ชื่อเรียกอื่น" ของยางเส้นนี้ (พิมพ์ชื่อขนาดที่เรียกต่างกัน)</div>' +
-        '<input class="pi-in" id="piAlias" placeholder="เช่น 15-30">' +
-        '<div class="pi-row"><button class="pi-btn pri" id="piAliasOk">ผูก</button><button class="pi-btn" id="piBack">ยกเลิก</button></div>';
+      var chips = info.aliases.length ? '<div class="pi-chips">' + info.aliases.map(function (a) { return '<span class="pi-chip">' + esc(a) + ' <a href="#" data-unalias="' + esc(a) + '">✕</a></span>'; }).join('') + '</div>' : '<div class="pi-empty">ยังไม่มีชื่อเรียกอื่น</div>';
+      body = '<div class="pi-lab">ชื่อเรียกอื่นของยางเส้นนี้ (เพิ่มได้หลายชื่อ 2-3 ชื่อ)</div>' + chips +
+        '<input class="pi-in" id="piAlias" placeholder="พิมพ์ชื่อแล้วกด Enter · เช่น 15-30">' +
+        '<div class="pi-row"><button class="pi-btn pri" id="piAliasOk">➕ เพิ่มชื่อ</button><button class="pi-btn" id="piBack">เสร็จ</button></div>';
     } else {
       // ── มุมมองปกติ ──
       if (td.dims) {
@@ -202,24 +234,28 @@
     if (q('#piEditType')) q('#piEditType').onclick = function () { re('editType'); };
     if (q('#piAliasBtn')) q('#piAliasBtn').onclick = function () { re('alias'); };
     if (q('#piTypeOk')) q('#piTypeOk').onclick = function () { setType(raw, q('#piType').value); re(null); done(); };
-    if (q('#piAliasOk')) q('#piAliasOk').onclick = function () { var v = q('#piAlias').value.trim(); if (v) linkAlias(raw, v); re(null); done(); };
+    if (q('#piAliasOk')) q('#piAliasOk').onclick = function () { var v = q('#piAlias').value.trim(); if (v) { linkAlias(raw, v); if (opts.onChange) opts.onChange(); } re('alias'); };
+    popEl.querySelectorAll('[data-unalias]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); unlink(a.dataset.unalias); if (opts.onChange) opts.onChange(); re('alias'); }; });
     if (q('#piSave')) q('#piSave').onclick = function () {
       var info = get(raw), td = info.typeDef;
       if (td.dims) { setDims(raw, q('#pi_hCm').value.trim(), q('#pi_wCm').value.trim()); }
       else { popEl.querySelectorAll('[data-fk]').forEach(function (inp) { setField(raw, inp.dataset.fk, inp.value.trim()); }); }
       re(null); done();
     };
+    var firstIn = popEl.querySelector('.pi-in, .pi-sel');
+    if (mode && firstIn) { setTimeout(function () { try { firstIn.focus(); if (firstIn.select) firstIn.select(); } catch (e) {} }, 20); }
+    else if (!opts.noFocus) { try { popEl.focus(); } catch (e) {} }   // มุมมองปกติ → โฟกัสป๊อปอัปให้ ESC ทำงาน (ยกเว้นตอนเลื่อนด้วยลูกศร)
   }
   function reposition() { if (!popEl) return; var r = popEl.getBoundingClientRect(); if (r.bottom > window.innerHeight - 8) popEl.style.top = Math.max(8, window.innerHeight - popEl.offsetHeight - 12) + 'px'; }
 
-  function exportData() { return { type: store.type, dims: store.dims, fields: store.fields, alias: store.alias }; }
-  function importData(d, replace) { if (!d) return; if (replace) { store.type = d.type || {}; store.dims = d.dims || {}; store.fields = d.fields || {}; store.alias = d.alias || {}; } else { ['type', 'dims', 'fields', 'alias'].forEach(function (k) { var r = d[k] || {}; Object.keys(r).forEach(function (n) { if (store[k][n] == null) store[k][n] = r[n]; }); }); } save(store); }
+  function exportData() { return { type: store.type, dims: store.dims, fields: store.fields, alias: store.alias, customTypes: store.customTypes }; }
+  function importData(d, replace) { if (!d) return; if (replace) { store.type = d.type || {}; store.dims = d.dims || {}; store.fields = d.fields || {}; store.alias = d.alias || {}; store.customTypes = d.customTypes || {}; } else { ['type', 'dims', 'fields', 'alias', 'customTypes'].forEach(function (k) { var r = d[k] || {}; store[k] = store[k] || {}; Object.keys(r).forEach(function (n) { if (store[k][n] == null) store[k][n] = r[n]; }); }); } save(store); }
   function listKnown() { var s = {}; ['type', 'dims', 'fields', 'alias'].forEach(function (k) { Object.keys(store[k]).forEach(function (n) { s[n] = 1; }); }); return Object.keys(s); }
   function syncPull() { if (!window.Registry || !Registry.prodInfoGet) return Promise.resolve(false); return Registry.prodInfoGet().then(function (res) { if (res && res.ok && res.data) { importData(res.data, false); return true; } return false; }).catch(function () { return false; }); }
   function syncPush(adminKey, by) { if (!window.Registry || !Registry.prodInfoSet) return Promise.resolve({ error: 'ไม่มีโมดูล Registry' }); return Registry.prodInfoSet(adminKey, exportData(), by); }
 
   window.ProductInfo = {
-    TYPES: TYPES, TYPE_ORDER: TYPE_ORDER, get: get, isComplete: isComplete, computeDims: computeDims,
+    TYPES: TYPES, TYPE_ORDER: TYPE_ORDER, getTypes: allTypes, getTypeOrder: typeOrder, addType: addType, removeType: removeType, get: get, isComplete: isComplete, computeDims: computeDims,
     setType: setType, setDims: setDims, setField: setField, linkAlias: linkAlias, unlink: unlink,
     showPopup: showPopup, close: close,
     exportData: exportData, importData: importData, listKnown: listKnown, syncPull: syncPull, syncPush: syncPush

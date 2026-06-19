@@ -103,7 +103,7 @@
   // ใช้ adapter ตาม config ปัจจุบัน (เรียกตอนโหลด + หลังบันทึกการตั้งค่า)
   function applyAdapter() {
     var cfg = DBX.config();
-    if (cfg.adapter === 'http' && cfg.baseUrl) DBX.setAdapter(HttpAdapter(cfg));
+    if (cfg.adapter === 'http' && cfg.baseUrl) DBX.setAdapter(DBX._httpAdapter ? DBX._httpAdapter(DBX.config) : HttpAdapter(cfg));   // ใช้ adapter จริงที่ส่ง header Flag/Username/Password
     else if (DBX.remakeMock) DBX.remakeMock();   // mock: สร้างชุดข้อมูลจำลองใหม่ (seed ใหม่) — กดจำลอง = ตัวเลขเปลี่ยนจริง
     return DBX.adapter().kind;
   }
