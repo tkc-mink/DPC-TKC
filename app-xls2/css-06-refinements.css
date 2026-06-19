@@ -71,10 +71,10 @@ body.dark .isp-box { background: #2d2d2d; }
 body.dark .isp-t { color: #aaa; }
 
 
-/* จัดแถวเครื่องมือแถว 2 ให้ตรงแนวกับแถว 1 (เริ่มหลังโลโก้ทั้งสองแถว) */
+/* จัดแถวเครื่องมือแถว 2 ให้ตรงแนวกับโลโก้ทั้งสองแถว) */
 .ribbon { position: relative; padding-left: 210px; }
 .ribbon .brand { position: absolute; left: 8px; top: 4px; }
-@media (max-width: 720px) { .ribbon { padding-left: 8px; } .ribbon .brand { position: static; } }
+/* layout ตรึงทุกขนาดหน้าต่าง — ไม่ยุบเป็น static ตอนแคบ (ใช้ scrollbar แนวนอนแทน) */
 
 
 /* ชื่อไฟล์อยู่แนวเดียวกับโลโก้ (ไม่มีบรรทัดรอง) */
@@ -93,7 +93,7 @@ body.dark .isp-t { color: #aaa; }
 #brandTtl { font-size: 13.5px; font-weight: 800; max-width: 230px; }
 .ribbon { padding-left: 232px; }
 .grp-status { left: 70px; }
-@media (max-width: 760px) { .ribbon { padding-left: 8px; } .ribbon .brand, .grp-status { position: static; } }
+/* (เดิมมี @media max-width:760px ยุบ brand/status เป็น static — ลบออกเพื่อให้ตำแหน่งคงที่ เลื่อน scrollbar เอา) */
 
 
 /* ชื่อไฟล์ยาว → ตัดท้ายด้วย … บรรทัดเดียว ไม่ดันความสูง */
@@ -499,4 +499,115 @@ body.dark .bdpop .bd-none-it.on { background: #4a3522; }
 }
 /* A3: แท็บใน Audit/ผู้ใช้ — pill กลมมนเต็ม สม่ำเสมอ (active = สีหัวหน้าต่าง) */
 .aud-tab, .usr-tab { border-radius: 999px; border-color: #e4e4e4; padding: 6px 14px; }
+
+
+/* ===== สีปียาง DOT: ตัวคั่นช่วง + จานสีในตั้งค่า ===== */
+.dot-sep { margin: 0 1px; }
+.dot-yr { font-weight: 700; }
+.dot-flag { font-weight: 800; letter-spacing: .3px; }
+.dotpal { gap: 5px; grid-template-columns: repeat(11, minmax(0, 1fr)) !important; }
+.dotpal .sw { width: 26px; height: 22px; border: 1px solid #999; border-radius: 4px; cursor: pointer; }
+.dotpal .sw.on { outline: 2px solid #1a1a1a; outline-offset: 1px; box-shadow: 0 0 0 1px #fff inset; }
+body.dark .dotpal .sw.on { outline-color: #fff; }
+.dot-wrap { line-height: 1; display: inline-block; }
+/* popup ราคาแยกราย DOT */
+.dotpop { position: fixed; z-index: 80; background: #fff; border: 1px solid #b9b9b9; border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.28); min-width: 340px; max-width: 92vw; font-family: inherit; overflow: hidden; }
+.dotpop-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  background: #1F8A5B; color: #fff; font-weight: 700; font-size: 13.5px; cursor: move; user-select: none; }
+.dotpop-x { cursor: pointer; opacity: .9; font-size: 14px; }
+.dotpop-x:hover { opacity: 1; }
+.dotpop-sub { padding: 7px 14px; font-size: 12px; color: #666; background: #FBFAF8; border-bottom: 1px solid #eee; }
+.dotpop-t { width: 100%; border-collapse: collapse; }
+.dotpop-t th, .dotpop-t td { padding: 6px 9px; border-bottom: 1px solid #eee; text-align: center; font-size: 12.5px; }
+.dotpop-t th { background: #f4f7f4; color: #555; font-weight: 700; }
+.dotpop-dot { font-weight: 800; font-size: 13.5px; }
+.dotpop-qty { color: #444; font-weight: 600; }
+.dotpop-zero { color: #c0392b; font-weight: 700; }
+.dotpop-code { font-family: Consolas, monospace; font-weight: 700; letter-spacing: .5px; color: #1a5fb4; }
+.dotpop-in { width: 78px; height: 28px; border: 1px solid #c4c4c4; border-radius: 5px; text-align: center; padding: 0 6px; font-family: inherit; font-size: 13px; }
+.dotpop-in:focus { outline: 2px solid #1F8A5B; border-color: #1F8A5B; }
+.dotpop-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid #eee; }
+body.dark .dotpop { background: #2a2a2a; border-color: #555; color: #ddd; }
+body.dark .dotpop-sub { background: #242424; color: #aaa; border-color: #444; }
+body.dark .dotpop-t th { background: #333; color: #ccc; }
+body.dark .dotpop-t th, body.dark .dotpop-t td { border-color: #444; }
+body.dark .dotpop-in { background: #333; border-color: #555; color: #eee; }
+/* ของกำลังเข้า (ดึงจาก DB): วันที่สั่ง + สถานะรับเข้า ในแผงรายละเอียด */
+.dp-incoming { margin: 8px 0; padding: 8px 11px; background: #FFF6E9; border: 1px solid #F3D9A6; border-radius: 8px; font-size: 12.5px; color: #8a5a1a; }
+.dp-incoming > b { color: #C75B00; }
+.dp-inc-row { margin-top: 3px; color: #888; font-size: 12px; }
+.dp-inc-st { font-weight: 700; color: #C75B00; }
+body.dark .dp-incoming { background: #3a2c18; border-color: #5a4528; color: #e0b878; }
+/* ป้ายแหล่งข้อมูล: เชื่อมเซิร์ฟเวอร์จริงไม่ได้ → แดง */
+.dbsrc-bad { background: #FDECEA; border-color: #f0a9a0; color: #C0392B; }
+.dbsrc-bad .dbsrc-dot { background: #E5322E; box-shadow: none; animation: none; }
+body.dark .dbsrc-bad { background: #3a2422; border-color: #6a3a36; color: #ff8a7a; }
+/* หัวเอกสาร (โลโก้+ชื่อ+สถานะ) — กระชับ 2 แถว อ่านง่าย ไม่ซ้อนทับ */
+.ribbon .brand { top: 6px; }
+.grp-status { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 3px; width: 150px; }
+.grp-status .schedchip { max-width: 40px; height: 17px; font-size: 9px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grp-status #schedChip, .grp-status #condChip { flex: 0 0 auto; }
+.grp-status #condChip { height: 17px; width: 17px; }
+.grp-status .dbsrc { height: 17px; padding: 0 6px; font-size: 9px; }
+.grp-status #saveState { width: auto; font-size: 9px; }
+/* ย้าย ⚙ ตั้งค่า มาต่อหลัง "ใช้ราคา: ทันที" (แนวเดียวกัน) แล้วตามด้วย ●สถานะ */
+.grp-status #condChip { order: 1; }
+.grp-status #dbSrcBadge { order: 2; }
+.grp-status #saveState { order: 3; }
+/* ตัวบ่งชี้ลิงก์เงื่อนไขในแถวไอคอนสถานะ (ตั้งค่า) */
+.stdef-link { flex: none; cursor: help; font-size: 13px; opacity: .85; padding: 0 1px; }
+.stdef-link.nolink { opacity: .4; }
+/* คลิกไอคอน 🚚 ของกำลังเข้า → popup รายละเอียดซ้อนเหนือ */
+.dp-stchip-click { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.dp-stchip-click:hover { background: rgba(244,124,32,.14); border-radius: 4px; }
+.dp-incpop { position: fixed; z-index: 150; background: #fff; border: 1px solid #b9b9b9; border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.3); min-width: 230px; overflow: hidden; font-size: 13px; }
+.dp-incpop-h { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; background: #C75B00; color: #fff; font-weight: 700; }
+.dp-incpop-h .pk-x { cursor: pointer; opacity: .9; }
+.dp-incpop-h .pk-x:hover { opacity: 1; }
+.dp-incpop-b { padding: 10px 13px; }
+.dp-incpop-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
+.dp-incpop-row > span { color: #888; }
+.dp-incpop .dp-inc-st { color: #C75B00; }
+body.dark .dp-incpop { background: #2a2a2a; border-color: #555; color: #ddd; }
+body.pop-bg .dp-incpop { background: var(--pop-bg) !important; }
+body.pop-fg .dp-incpop { color: var(--pop-fg) !important; }
+.dp-incpop-foot { padding: 8px 13px; border-top: 1px solid #eee; }
+.dp-incpop-link { color: #2A6FDB; cursor: pointer; font-size: 12px; font-weight: 600; }
+.dp-incpop-link:hover { text-decoration: underline; }
+body.dark .dp-incpop-foot { border-color: #444; }
+/* ✕ รีเซ็ตสี popup (กลับค่าปกติ) */
+.dotpal .sw.dotpal-reset { display: grid; place-items: center; font-size: 11px; color: #999; background: #fff; font-weight: 700; }
+/* สีพื้นหลัง/ตัวอักษร popup ทุกหน้าต่าง (มีผลเมื่อตั้งค่าเท่านั้น) */
+/* สีพื้นหลัง/ตัวอักษร popup ทุกหน้าต่าง/ทุกฟังก์ชั่น (มีผลเมื่อตั้งค่าเท่านั้น) */
+body.pop-bg .cdlg, body.pop-bg .swpop, body.pop-bg .dotpop, body.pop-bg .sg-pricepop,
+body.pop-bg .sg-pick, body.pop-bg .sg-ctx, body.pop-bg .sg-colbind, body.pop-bg .sg-detail,
+body.pop-bg .sg-gallery, body.pop-bg .sg-imgviewer, body.pop-bg .sg-statusmenu, body.pop-bg .emoji-pick,
+body.pop-bg .stm-win, body.pop-bg .aud-win, body.pop-bg .usr-win, body.pop-bg .modal .dlg { background: var(--pop-bg) !important; }
+body.pop-fg .cdlg, body.pop-fg .swpop, body.pop-fg .dotpop, body.pop-fg .sg-pricepop,
+body.pop-fg .sg-pick, body.pop-fg .sg-ctx, body.pop-fg .sg-colbind, body.pop-fg .sg-detail,
+body.pop-fg .sg-gallery, body.pop-fg .sg-imgviewer, body.pop-fg .sg-statusmenu, body.pop-fg .emoji-pick,
+body.pop-fg .stm-win, body.pop-fg .aud-win, body.pop-fg .usr-win, body.pop-fg .modal .dlg { color: var(--pop-fg) !important; }
+/* จานสีเลือกเอง (🎨 color picker) */
+.dotpal-custom { position: relative; overflow: hidden; display: inline-block; }
+.dotpal-custom input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0; }
+.dotpal-custom-ic { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; pointer-events: none;
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+
+
+/* ===== Ctrl+เลือกหลายหัวคอลัมน์/แถว (ไม่ต่อเนื่อง) → ไฮไลต์ส้ม พร้อมลากปรับขนาดพร้อมกัน ===== */
+.sg-h.multi, .sg-g.multi { background: #FFD9A8 !important; color: #7a3b00 !important; font-weight: 800;
+  box-shadow: inset 0 0 0 2px #F47C20; position: relative; z-index: 8; }
+body.dark .sg-h.multi, body.dark .sg-g.multi { background: #5e3c18 !important; color: #ffce9e !important; box-shadow: inset 0 0 0 2px #F49A50; }
+
+
+/* ================= แถบเครื่องมือคงที่ทุกขนาดหน้าต่าง (ไม่ reflow) =================
+   ห่อกลุ่มเครื่องมือไว้ใน .rb-tools กว้างคงที่ → wrap เหมือนกันทุกขนาดหน้าต่าง
+   → จำนวนแถวคงที่ · ▼ (ปรับขนาดฟอนต์) ไม่ขยับ · โลโก้/สถานะ (absolute) อยู่ที่เดิม */
+.rb-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; width: 690px; flex: none; }
+.ribbon { flex-wrap: nowrap; }            /* มีแค่ rb-tools ที่ไหล (brand/status absolute ถูกดึงออกจาก flow) */
+.rb-tools .grp-fx { flex: 0 1 auto; }
+.rb-tools .grp-fx #fx { flex: 0 1 260px; width: 260px; max-width: 300px; min-width: 150px; }
+/* จอแคบมาก (ต่ำกว่าความกว้าง rb-tools) → เลื่อนแนวนอนได้ ไม่บังปุ่ม */
+.ribbon { overflow: visible; }
 

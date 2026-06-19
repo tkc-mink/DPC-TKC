@@ -36,6 +36,7 @@
         '<div class="usr-tabs">' +
           '<button class="usr-tab' + (tab === 'perms' ? ' on' : '') + '" data-tab="perms">🔑 ผู้ใช้ & สิทธิ์</button>' +
           '<button class="usr-tab' + (tab === 'devices' ? ' on' : '') + '" data-tab="devices">💻 ประวัติอุปกรณ์</button>' +
+          '<button class="usr-tab" id="usrCentral" style="margin-left:auto;color:#C75B00;">🛡️ ระบบกลาง (Worker) ▸</button>' +
         '</div>' +
         '<div class="usr-bodywrap"><div class="usr-body"></div></div>' +
         '<div class="usr-foot"><span class="usr-note">⚠️ ความปลอดภัยจริงต้องตรวจสิทธิ์ที่เซิร์ฟเวอร์ — ชั้นนี้คุมการแสดงผล/การทำงานฝั่งหน้าจอ</span></div>' +
@@ -74,7 +75,9 @@
   function bindOnce() {
     el.addEventListener('click', function (e) {
       if (e.target.closest('.usr-x') || e.target === el) { close(); return; }
+      if (e.target.closest('#usrCentral')) { if (window.AdminCentral) AdminCentral.open(); else (window.SG && SG.toast ? SG.toast('ยังไม่มีโมดูลระบบกลาง') : 0); return; }
       var t = e.target.closest('.usr-tab'); if (t) { tab = t.dataset.tab; render(); return; }
+      if (e.target.closest('#usrCentral')) { if (window.AdminCentral) AdminCentral.open(); else (window.SG && SG.toast ? SG.toast('ยังไม่มีโมดูลระบบกลาง') : 0); return; }
       if (e.target.closest('.usr-addbtn')) {
         var inp = el.querySelector('.usr-adduser'); var v = (inp.value || '').trim();
         if (v) { DBX.permSetRole(v, 'user'); paint(); } return;

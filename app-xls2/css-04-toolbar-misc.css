@@ -96,9 +96,9 @@ td.sg-c.pclick { cursor: pointer; }
 .pp-eff { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #ddd; color: #8a6d1a; font-size: 11px; }
 
 /* ---------- chatbot 🐕 (ธีมส้มอ่อน สดใส มีพลัง) ---------- */
-#cbFab { position: fixed; right: 18px; bottom: 18px; z-index: 200; width: 56px; height: 56px; border-radius: 50%; touch-action: none;
-  border: 2.5px solid #F47C20; background: #FFF3E6; cursor: pointer; padding: 6px;
-  box-shadow: 0 8px 24px rgba(244,124,32,.35); transition: transform .15s; }
+#cbFab { position: fixed; right: 18px; bottom: 18px; z-index: 200; width: 66px; height: 66px; border-radius: 50%; touch-action: none;
+  border: 3px solid #F47C20; background: #FFF3E6; cursor: pointer; padding: 6px;
+  box-shadow: 0 10px 28px rgba(244,124,32,.42); transition: transform .15s; }
 #cbFab svg { width: 100%; height: 100%; display: block; }
 #cbFab:hover { transform: scale(1.08); }
 #cbFab:active { cursor: grabbing; }

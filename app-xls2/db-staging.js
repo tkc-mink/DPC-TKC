@@ -30,6 +30,7 @@
     { key: 'qtyReserved', label: 'จอง', group: 'สต็อก' },
     { key: 'qtyAvailable', label: 'คงเหลือสุทธิ (หักจอง)', group: 'สต็อก' },
     { key: 'incoming', label: 'ของกำลังเข้า', group: 'สต็อก' },
+    { key: 'dotRange', label: 'ปียาง DOT (ช่วงปี)', group: 'สต็อก' },
     { key: 'unit', label: 'หน่วยนับ', group: 'สต็อก' },
     { key: 'salePrice1', label: 'ราคาขาย 1', group: 'ราคา (เขียนได้)', writable: true },
     { key: 'salePrice2', label: 'ราคาขาย 2', group: 'ราคา (เขียนได้)', writable: true },
@@ -47,8 +48,12 @@
     // เลียนแบบรหัส 13 หลักจริง: 001 + กลุ่ม(02) + ชนิด(03) + running
     return '00102303' + String(14001 + i).slice(-5);
   }
+  var mockSeed = 0;   // เปลี่ยนทุกครั้งที่สลับมาโหมดจำลอง → ข้อมูลสต็อก/สถานะอัพเดท (ทดสอบสมจริงขึ้น)
+  // ตัวสุ่มแบบกำหนด seed (mulberry32) — กดจำลองใหม่ = seed ใหม่ = ชุดข้อมูลใหม่ที่ "ทำซ้ำได้/พิสูจน์ได้ว่าเปลี่ยน"
+  function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function MockAdapter() {
     var built = null;
+    var rnd = mulberry32(((mockSeed * 2654435761) ^ 0x9E3779B9) >>> 0);   // ลำดับสุ่มคงที่ต่อ seed (สต็อก/ของเข้า) — ราคายังคงที่ตามชุดข้อมูลจริง
     function build() {
       if (built) return built;
       built = {};
@@ -57,10 +62,11 @@
         var code = makeCode13(i);
         var brandName = (window.XL2 && XL2.brandFull) ? XL2.brandFull(r.brand) : r.brand;
         var name = 'ยาง ' + r.brand + ' ' + r.size + ' ' + (r.ply ? r.ply + 'PR ' : '') + r.model;
-        // mock สต็อก/จอง/กำลังเข้า แบบกระจายให้ทดสอบทุกสถานะ
-        var onHand = [0, 1, 2, 3, 4, 6, 8, 12, 20, 30][i % 10];
-        var reserved = [0, 0, 1, 2, 4, 0, 2, 8, 0, 26][i % 10];
-        var incoming = (i % 5 === 0) ? (i % 3 + 1) * 4 : 0;
+        // mock สต็อก/จอง/กำลังเข้า — สุ่มแปรผันทุกครั้งที่สร้าง (กดจำลองใหม่ = ข้อมูลอัพเดทจริง)
+        var base = [0, 1, 2, 3, 4, 6, 8, 12, 20, 30][i % 10];
+        var onHand = base <= 0 ? (rnd() < 0.4 ? 0 : Math.ceil(rnd() * 3)) : Math.max(0, Math.round(base * (0.55 + rnd() * 0.9)));
+        var reserved = Math.min(onHand, [0, 0, 1, 2, 4, 0, 2, 8, 0, 26][i % 10]);
+        var incoming = (rnd() < 0.28) ? Math.ceil(rnd() * 3) * 4 : 0;
         var status = (i % 13 === 12) ? 'inactive' : 'active';   // บางตัว inactive ไว้ทดสอบ
         var cost = (window.XL2 ? XL2.toN(r.cost) : parseFloat(r.cost)) || 0;
         built[code] = {
@@ -69,8 +75,11 @@
           group: '03', productType: '14',
           size: r.size, ply: r.ply, model: r.model, spec: r.spec || '',
           costStandard: cost, costAverage: Math.round(cost * 1.003), costLatest: Math.round(cost * 0.998),
-          qtyOnHand: onHand, qtyReserved: reserved, incoming: incoming, unit: 'เส้น',
+          qtyOnHand: onHand, qtyReserved: reserved, incoming: incoming,
+          incomingInfo: (incoming > 0 ? { orderedAt: Date.now() - (3 + (i % 12)) * 86400000, status: (i % 2 ? 'receiving' : 'ordered') } : null),   // ข้อมูลของกำลังเข้า (DB จริงส่งมา): วันที่สั่ง + สถานะรับเข้า
+          unit: 'เส้น',
           dotWeeks: mockDot(i, onHand),
+          _nw: (i % 9 === 4),   // ตัวอย่าง: บางสินค้า "ต้องเบิก" → ไม่แสดง DOT (DB จริงส่ง flag มาเอง)
           imageUrl: '',   // DB จริงส่ง URL — mock เว้นว่าง
           salePrice1: num(r.retail), salePrice2: num(r.priceB), salePrice3: num(r.priceA),
           salePrice4: num(r.priceS), salePrice5: num(r.priceS),
@@ -81,13 +90,28 @@
     }
     function num(v) { return (window.XL2 ? XL2.toN(v) : parseFloat(v)) || 0; }
     function mockDot(i, onHand) {
-      if (onHand <= 0) return [];
-      var weeks = [], left = onHand, base = 20 + (i % 4);     // ปี DOT
-      var ws = [12, 23, 35, 48];
-      for (var j = 0; j < ws.length && left > 0; j++) {
-        var q = Math.min(left, Math.ceil(onHand / (4 - j)));
-        weeks.push({ dot: base, week: ws[j], qty: q }); left -= q;
+      var now = new Date().getFullYear() % 100;
+      if (onHand <= 0) {
+        // หมดสต๊อก — คืนประวัติ DOT (qty 0): บางตัวล่าสุดเป็นปีปัจจุบัน · บางตัวเป็นปีเก่า
+        return [{ dot: (i % 2 ? now : now - 3), week: 20, qty: 0 }];
       }
+      // ปี DOT อ้างปีปัจจุบัน (จากนาฬิกาเครื่อง) — กระจายหลายแบบให้เห็นทั้งช่วงกว้าง/แคบ/ปีเดียว/ไม่มีปีล่าสุด
+      var patterns = [
+        [now],                              // ปีเดียว (ล่าสุด)
+        [now - 1, now],                     // 2 ปี ติดกัน
+        [now - 4, now - 2, now - 1, now],   // ช่วงกว้าง 4 ปี
+        [now - 2, now],                     // เก่า 2 ปี + ล่าสุด
+        [now - 3, now - 1],                 // ไม่มีปีล่าสุด (เก่าทั้งคู่)
+        [now - 5, now - 3, now]             // กว้างมาก ข้ามปี
+      ];
+      var ys = patterns[i % patterns.length];
+      var ws = [12, 23, 35, 48], weeks = [], left = onHand, n = ys.length;
+      for (var j = 0; j < n && left > 0; j++) {
+        var q = Math.min(left, Math.ceil(onHand / (n - j)));
+        weeks.push({ dot: ((ys[j] % 100) + 100) % 100, week: ws[j % ws.length], qty: q }); left -= q;
+      }
+      // บางสินค้ามียางเกิด deflect (DF) เป็นชุดแยกในสต๊อก (นับเป็น 1 ชุด)
+      if (i % 5 === 2 && weeks.length) weeks.push({ dot: ys[ys.length - 1], week: 9, qty: 1 + (i % 3), df: true });
       return weeks;
     }
     return {
@@ -352,13 +376,134 @@
     c.qtyAvailable = (c.qtyOnHand || 0) - (c.qtyReserved || 0);
     c.enrich = enrichGet(c.code13) || {};
     c.flags = c.enrich.flags || {};
+    if (c._nw && c.flags.needsWithdraw == null) c.flags.needsWithdraw = true;   // ตัวอย่าง "ต้องเบิก" (DB จริงส่ง flag มาเอง)
     c._setSize = resolveSetSize(c);
     // รูปสินค้า: DB จริงส่ง array ของ URL · mock สร้างจำนวน 4-6 ช่อง (ยังไม่มี URL จริง → โชว์ placeholder)
     if (!Array.isArray(c.images)) {
       if (c.imageUrl) c.images = [{ url: c.imageUrl }];
-      else { var n = 4 + (parseInt((c.code13 || '0').slice(-1), 10) % 3); c.images = []; for (var i = 0; i < n; i++) c.images.push({ url: '' }); }
+      else { var n = 4; c.images = []; for (var i = 0; i < n; i++) c.images.push({ url: '' }); }   // DB จริงมีรูปสูงสุด 4 รูป
     }
     return c;
+  }
+
+  // ---------- ① Http Adapter (เซิร์ฟเวอร์จริง) — ส่ง auth เป็น HTTP headers (Authorization/Flag/Username/Password) ----------
+  function httpHeaders(cfg) {
+    var h = { 'ngrok-skip-browser-warning': 'true' };
+    if (cfg.token) h['Authorization'] = cfg.token;
+    if (cfg.flag) h['Flag'] = cfg.flag;
+    if (cfg.username) h['Username'] = cfg.username;
+    if (cfg.password) h['Password'] = cfg.password;
+    return h;
+  }
+  function httpFetchRaw(cfg, flag) {
+    var url = (cfg.baseUrl || '').trim();
+    if (!url) return Promise.reject(new Error('ยังไม่ได้ตั้ง Base URL'));
+    var c = Object.assign({}, cfg, { flag: flag || cfg.flag || 'PRICE' });
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctrl) ctrl.abort(); }, cfg.timeoutMs || 12000);
+    return fetch(url, { method: 'GET', headers: httpHeaders(c), signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) { return r.text().then(function (t) { clearTimeout(to); var j; try { j = JSON.parse(t); } catch (e) { throw new Error('ข้อมูลไม่ใช่ JSON (status ' + r.status + ')'); } if (j && j.error) throw new Error(j.message || ('server error ' + r.status)); return j; }); })
+      .catch(function (e) { clearTimeout(to); throw (e && e.name === 'AbortError' ? new Error('หมดเวลา (timeout)') : e); });
+  }
+  function mapPriceRow(row) {
+    var num = function (v) { return Math.round((parseFloat(v) || 0) * 100) / 100; };
+    return {
+      code13: String(row.ID || row.id || '').trim(), unit: row.UNIT || 'เส้น',
+      salePrice1: num(row.PRICE1), salePrice2: num(row.PRICE2), salePrice3: num(row.PRICE3),
+      salePrice4: num(row.PRICE4), salePrice5: num(row.PRICE5)
+    };
+  }
+  // ---------- snapshot ราคา (เข้ารหัสด้วยกุญแจจาก PIN ถ้ามี login) — เก็บใน IndexedDB ----------
+  // ย้ายจาก localStorage → IndexedDB: ทะลุลิมิต ~5MB รองรับหมื่น SKU + ดัชนีค้นหาในเครื่อง
+  // meta เล็ก (ts/enc/count) ยังเก็บใน localStorage ให้ snapInfo() อ่านแบบ sync ได้ทันที (ป้ายอายุราคาไม่กระพริบ)
+  var SNAP_KEY = 'xls2_pricesnapshot';   // คีย์ blob: ใน IDB store 'kv' · (และคีย์เดิมใน localStorage สำหรับ migrate ครั้งแรก)
+  var META_KEY = 'xls2_snapmeta';
+  var snapMeta = null;
+  function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || 'null'); } catch (e) { return null; } }
+  function writeMeta(m) { snapMeta = m; try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (e) {} }
+  snapMeta = readMeta();
+  // seed meta จาก snapshot เก่าใน localStorage (ก่อน migrate) → ป้ายอายุราคาทำงานได้ทันทีรอบแรก
+  if (!snapMeta) { var _s0 = null; try { _s0 = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch (e) {} if (_s0) snapMeta = { ts: _s0.ts || 0, enc: !!_s0.enc, count: 0 }; }
+
+  function hxB(h) { h = String(h || ''); var a = new Uint8Array(h.length / 2); for (var i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; }
+  function bHx(a) { a = new Uint8Array(a); return [].map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function authKey() { return (window.Auth && Auth.unlockKey && Auth.unlockKey()) || ''; }
+  function idbOk() { return window.IDB && IDB.supported(); }
+
+  function putSnapBlob(blob) {   // เขียน blob → IDB (หรือ localStorage ถ้าไม่รองรับ IDB)
+    if (idbOk()) IDB.set('kv', blob, SNAP_KEY);
+    else { try { localStorage.setItem(SNAP_KEY, JSON.stringify(blob)); } catch (e) {} }
+  }
+  function getSnapBlob() {   // → Promise<blob|null> · มี migrate localStorage→IDB ครั้งแรก
+    if (idbOk()) {
+      return IDB.get('kv', SNAP_KEY).then(function (b) {
+        if (b) return b;
+        var old = null; try { old = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch (e) {}
+        if (old) { IDB.set('kv', old, SNAP_KEY); writeMeta({ ts: old.ts || 0, enc: !!old.enc, count: 0 }); try { localStorage.removeItem(SNAP_KEY); } catch (e) {} return old; }
+        return null;
+      });
+    }
+    var s = null; try { s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch (e) {}
+    return Promise.resolve(s);
+  }
+  function indexProducts(map) {   // ดัชนีค้นหาในเครื่อง — เก็บเฉพาะข้อมูลระบุสินค้า ไม่มีราคา (data-minimization)
+    if (!idbOk() || !map) return;
+    var arr = []; Object.keys(map).forEach(function (c) { var p = map[c] || {}; arr.push({ code13: c, name: p.name || '', brandCode: p.brandCode || p.brand || '', size: p.size || '', model: p.model || '' }); });
+    if (arr.length) IDB.clear('products').then(function () { IDB.bulkPut('products', arr); });
+  }
+
+  function saveSnap(obj) {   // มี PIN key → AES-GCM · ไม่มี → เก็บ plain (ยังไงก็ไม่มีทุน)
+    var plain = JSON.stringify(obj), key = authKey();
+    var count = (obj && obj.map) ? Object.keys(obj.map).length : 0;
+    indexProducts(obj && obj.map);
+    if (!key || !(window.crypto && crypto.subtle)) { putSnapBlob({ enc: false, ts: obj.ts, d: plain }); writeMeta({ ts: obj.ts, enc: false, count: count }); return; }
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    crypto.subtle.importKey('raw', hxB(key).slice(0, 32), 'AES-GCM', false, ['encrypt'])
+      .then(function (k) { return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, new TextEncoder().encode(plain)); })
+      .then(function (ct) { putSnapBlob({ enc: true, ts: obj.ts, iv: bHx(iv), d: bHx(ct) }); writeMeta({ ts: obj.ts, enc: true, count: count }); }).catch(function () {});
+  }
+  function loadSnap() {   // → Promise<obj|null>
+    return getSnapBlob().then(function (s) {
+      if (!s) return null;
+      if (!s.enc) { try { return JSON.parse(s.d); } catch (e) { return null; } }
+      var key = authKey(); if (!key || !(window.crypto && crypto.subtle)) return null;   // ข้อมูลเข้ารหัส—ต้อง login ก่อนถึงอ่านได้
+      return crypto.subtle.importKey('raw', hxB(key).slice(0, 32), 'AES-GCM', false, ['decrypt'])
+        .then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: hxB(s.iv) }, k, hxB(s.d)); })
+        .then(function (pt) { try { return JSON.parse(new TextDecoder().decode(pt)); } catch (e) { return null; } }).catch(function () { return null; });
+    });
+  }
+  function snapInfo() {
+    if (snapMeta && snapMeta.ts) return { ts: snapMeta.ts, enc: !!snapMeta.enc, count: snapMeta.count || 0 };
+    var s = null; try { s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch (e) {} return s ? { ts: s.ts || 0, enc: !!s.enc } : null;
+  }
+
+  function HttpAdapter(getCfg) {
+    var cache = null;   // { ts, map:{code:product} } — API ส่งราคามาทั้งชุด → ดึงรอบเดียวแล้วแคช 60 วิ
+    function loadAll() {
+      if (cache && (Date.now() - cache.ts < 60000)) return Promise.resolve(cache.map);
+      return httpFetchRaw(getCfg(), 'PRICE').then(function (j) {
+        if (j && (j.wipe === true || j.command === 'WIPE' || j.WIPE === true)) {   // remote wipe: เซิร์ฟเวอร์สั่งล้างข้อมูลในเครื่อง (เครื่องหาย/พนักงานออก)
+          DBX.wipeLocal(true); throw new Error('เซิร์ฟเวอร์สั่งล้างข้อมูลในเครื่องนี้ (remote wipe)');
+        }
+        var map = {};
+        (j.data || []).forEach(function (row) { var p = mapPriceRow(row); if (p.code13) map[p.code13] = p; });
+        cache = { ts: Date.now(), map: map };
+        saveSnap({ ts: cache.ts, map: map });   // เก็บ snapshot ล่าสุด (เข้ารหัสถ้ามี PIN) — เฉพาะราคา ไม่มีทุน
+        return map;
+      }).catch(function (e) {
+        return loadSnap().then(function (snap) {   // ต่อ server ไม่ได้ → fallback snapshot ล่าสุด (ทำงานต่อได้)
+          if (snap && snap.map) { cache = { ts: snap.ts, map: snap.map, stale: true }; return snap.map; }
+          throw e;
+        });
+      });
+    }
+    return {
+      kind: 'http', _clearCache: function () { cache = null; },
+      search: function (opt) { return loadAll().then(function (map) { var q = ((opt && opt.q) || '').trim(); var out = []; Object.keys(map).forEach(function (c) { if (!q || c.indexOf(q) >= 0) out.push({ code13: c }); }); return out.slice(0, 50); }); },
+      get: function (code) { return loadAll().then(function (map) { return map[String(code).trim()] || null; }); },
+      batch: function (codes) { return loadAll().then(function (map) { return (codes || []).map(function (c) { return map[String(c).trim()] || null; }).filter(Boolean); }); },
+      pushPrices: function () { return Promise.reject(new Error('ยังไม่เปิดเขียนราคากลับ DB (read-only)')); }
+    };
   }
 
   // ---------- public API ----------
@@ -372,8 +517,28 @@
     // adapter control (สลับ mock/http ภายหลัง)
     adapter: function () { return adapter; },
     setAdapter: function (a) { adapter = a; },
-    config: function () { return lsGet(K_CONFIG, { baseUrl: '', token: '', useAuth: false, adapter: 'mock' }); },
+    config: function () { return lsGet(K_CONFIG, { baseUrl: '', token: '', username: '', password: '', flag: 'PRICE', useAuth: false, adapter: 'mock', timeoutMs: 12000 }); },
     setConfig: function (o) { lsSet(K_CONFIG, Object.assign(DBX.config(), o)); },
+    snapshotInfo: snapInfo,
+    mockSeed: function () { return mockSeed; },
+    remakeMock: function () { mockSeed++; adapter = MockAdapter(); return adapter; },   // สร้างชุดข้อมูลจำลองใหม่ (seed ใหม่) — ใช้ตอนกด "จำลอง"
+    _saveSnap: saveSnap, _loadSnap: loadSnap,   // ให้ dbx-connect (HttpAdapter จริง) เก็บ/อ่าน snapshot ผ่าน IndexedDB ได้
+    searchLocal: function (q, limit) { return (window.IDB && IDB.supported()) ? IDB.searchProducts(q, limit) : Promise.resolve([]); },
+    wipeLocal: function (alsoAuth) {   // ล้าง snapshot+cache ในเครื่อง · alsoAuth=true ล้าง PIN ด้วย (remote wipe / เครื่องหาย)
+      try { localStorage.removeItem(SNAP_KEY); } catch (e) {}
+      try { localStorage.removeItem(META_KEY); } catch (e) {}
+      snapMeta = null;
+      if (idbOk()) { try { IDB.del('kv', SNAP_KEY); IDB.clear('products'); } catch (e) {} }
+      try { if (adapter && adapter._clearCache) adapter._clearCache(); } catch (e) {}
+      if (alsoAuth && window.Auth && Auth.clearPin) { try { Auth.clearPin(); } catch (e) {} }
+    },
+    applyAdapter: function () { var cfg = DBX.config(); if (cfg.adapter !== 'http') mockSeed++; adapter = (cfg.adapter === 'http') ? HttpAdapter(DBX.config) : MockAdapter(); return adapter; },
+    testConnection: function (cfg) {
+      var c = cfg || DBX.config();
+      if (c.adapter !== 'http') return Promise.resolve({ ok: true, ms: 0, count: null, mock: true });
+      var t0 = Date.now();
+      return httpFetchRaw(c, c.flag || 'PRICE').then(function (j) { return { ok: true, ms: Date.now() - t0, count: (j.data || []).length, sample: (j.data || [])[0] || null }; }).catch(function (e) { return { ok: false, error: (e && e.message) || String(e) }; });
+    },
     // ② search / pull
     search: function (opt) { return adapter.search(opt); },
     getClean: function (code) { return adapter.get(code).then(toClean); },
@@ -398,4 +563,5 @@
     toClean: toClean
   };
   window.DBX = DBX;
+  try { if (DBX.config().adapter === 'http') DBX.applyAdapter(); } catch (e) {}
 })();

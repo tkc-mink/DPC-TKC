@@ -5,8 +5,8 @@
 /* ===== Excel v2 — true spreadsheet ===== */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body { font-family: Arial, Tahoma, sans-serif; background: #d4d4d4; color: #000; overflow: hidden; }
-.app { display: flex; flex-direction: column; height: 100vh; }
+body { font-family: Arial, Tahoma, sans-serif; background: #d4d4d4; color: #000; overflow-x: auto; overflow-y: hidden; }
+.app { display: flex; flex-direction: column; height: 100vh; min-width: 908px; }   /* ตรึงความกว้างขั้นต่ำ — หน้าต่างแคบกว่านี้เลื่อน scrollbar แนวนอนเอา (แบบ Excel) ไม่ reflow */
 
 /* ---------- ribbon ---------- */
 .ribbon { background: linear-gradient(#fbfbfb,#eee); border-bottom: 1px solid #b9b9b9;

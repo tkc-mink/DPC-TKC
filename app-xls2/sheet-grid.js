@@ -162,7 +162,7 @@
     makeDraggable(detailEl, '.dp-head');
     window.DBX.getClean(code).then(function (p) {
       if (!p) { detailEl.querySelector('.dp-body').innerHTML = '<div class="dp-loading">⚠️ ไม่พบสินค้า "' + esc(code) + '" ใน DB</div>'; return; }
-      var icons = window.DBX.computeStatus(p, 8).map(function (d) { return '<span class="dp-stchip"' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + ' ' + esc(d.label) + '</span>'; }).join('');
+      var icons = window.DBX.computeStatus(p, 8).map(function (d) { var clk = (d.key === 'incoming' && p.incomingInfo) ? ' dp-stchip-click' : ''; return '<span class="dp-stchip' + clk + '" data-stkey="' + esc(d.key || '') + '"' + (d.color ? ' style="color:#' + d.color + '"' : '') + '>' + esc(d.icon) + ' ' + esc(d.label) + '</span>'; }).join('');
       var dotRows = (p.dotWeeks && p.dotWeeks.length)
         ? p.dotWeeks.map(function (d) { return '<tr><td>' + esc(d.dot) + '</td><td>' + esc(d.week) + '</td><td class="dp-num">' + (typeof d.qty === 'number' ? d.qty.toLocaleString('en-US') : esc(d.qty)) + '</td></tr>'; }).join('')
         : '<tr><td colspan="3" class="dp-dim">— ไม่มีข้อมูล DOT —</td></tr>';
@@ -182,10 +182,48 @@
         '<table class="dp-dot"><tbody>' + dotRows + '</tbody></table>';
       var ib = detailEl.querySelector('.dp-imgbtn');
       if (ib && imgN) ib.onclick = function () { openImageGallery(p); };
+      detailEl.querySelectorAll('.dp-stchip-click').forEach(function (ch) { ch.onclick = function (e) { e.stopPropagation(); showIncomingPopup(p, ch); }; });   // คลิกไอคอนของกำลังเข้า → popup ซ้อนเหนือ
       positionDetail(anchorEl);
     });
     function stat(label, val, tone) { var s = (typeof val === 'number') ? val.toLocaleString('en-US') : String(val); return '<div class="dp-stat' + (tone ? ' dp-' + tone : '') + '"><span class="dp-lbl">' + label + '</span><span class="dp-val">' + esc(s) + '</span></div>'; }
+    function incomingHTML(p) {
+      if (!(p.incoming > 0) || !p.incomingInfo) return '';
+      var ii = p.incomingInfo, d = ii.orderedAt ? new Date(ii.orderedAt) : null;
+      var dateStr = d ? d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' }) : '–';
+      var days = d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
+      var st = (ii.status === 'receiving') ? 'กำลังรับเข้า' : 'สั่งซื้อแล้ว (รอของ)';
+      return '<div class="dp-incoming">🚚 <b>ของกำลังเข้า ' + esc(p.incoming) + ' เส้น</b>' +
+        '<div class="dp-inc-row">สั่งเมื่อ: <b>' + dateStr + '</b>' + (days != null ? ' (' + days + ' วันก่อน)' : '') + '</div>' +
+        '<div class="dp-inc-row">สถานะ: <span class="dp-inc-st">' + st + '</span></div></div>';
+    }
   }
+  // popup รายละเอียดของกำลังเข้า (ซ้อนเหนือแผงรายละเอียด · เข้า PopupStack)
+  var incPopEl = null;
+  function showIncomingPopup(p, anchor) {
+    if (!p || !p.incomingInfo) return;
+    if (!incPopEl) { incPopEl = document.createElement('div'); incPopEl.className = 'dp-incpop'; document.body.appendChild(incPopEl); }
+    var ii = p.incomingInfo, d = ii.orderedAt ? new Date(ii.orderedAt) : null;
+    var dateStr = d ? d.toLocaleDateString('th-TH', { day: '2-digit', month: 'long', year: '2-digit' }) : '–';
+    var days = d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
+    var st = (ii.status === 'receiving') ? 'กำลังรับเข้า' : 'สั่งซื้อแล้ว (รอของ)';
+    incPopEl.innerHTML = '<div class="dp-incpop-h">🚚 ของกำลังเข้า<span class="pk-x">✕</span></div>' +
+      '<div class="dp-incpop-b">' +
+      '<div class="dp-incpop-row"><span>จำนวน</span><b>' + esc(p.incoming) + ' เส้น</b></div>' +
+      '<div class="dp-incpop-row"><span>สั่งเมื่อ</span><b>' + esc(dateStr) + (days != null ? ' (' + days + ' วันก่อน)' : '') + '</b></div>' +
+      '<div class="dp-incpop-row"><span>สถานะ</span><b class="dp-inc-st">' + st + '</b></div>' +
+      '</div>' +
+      '<div class="dp-incpop-foot"><a class="dp-incpop-link">⚙ ตั้งค่า / เชื่อมต่อฐานข้อมูล</a></div>';
+    incPopEl.style.display = 'block';
+    var rc = anchor.getBoundingClientRect();
+    incPopEl.style.left = Math.max(8, Math.min(rc.left, window.innerWidth - incPopEl.offsetWidth - 12)) + 'px';
+    var top = rc.top - incPopEl.offsetHeight - 6;
+    incPopEl.style.top = (top < 8 ? (rc.bottom + 6) : top) + 'px';   // อยู่เหนือไอคอน (ไม่พอก็ลงล่าง)
+    var close = function () { incPopEl.style.display = 'none'; if (window.PopupStack) PopupStack.remove(incPopEl); };
+    if (window.PopupStack) PopupStack.push(incPopEl, close);
+    incPopEl.querySelector('.pk-x').onclick = close;
+    var lk = incPopEl.querySelector('.dp-incpop-link'); if (lk) lk.onclick = function () { close(); if (window.openSettings) window.openSettings('dbconn'); };
+  }
+
   // แกลเลอรีรูปสินค้า — ป๊อปอัปซ้อนเหนือ panel เดิม (เข้า PopupStack · Esc ปิดทีละชั้น)
   var galleryEl = null;
   function openImageGallery(p) {
@@ -285,7 +323,7 @@
     if (cm && cm.field && code) { var p2 = dbCache[code]; return p2 ? dbFieldVal(p2, cm.field) : (dbTried[code] ? '' : '\u2026'); }
     return undefined;
   }
-  function dbFieldVal(p, field) { var v = p[field]; return (v == null) ? '' : v; }
+  function dbFieldVal(p, field) { if (field === 'dotRange') return window.DOT ? window.DOT.rangeText(p) : ''; var v = p[field]; return (v == null) ? '' : v; }
   // ช่องนี้ผูก DB อยู่ไหม (มีไว้ล็อก read-only) · 'read'|'write'|null
   function dbCellMode(r, c) {
     if (!window.DBX) return null;
@@ -370,6 +408,10 @@
     if (view.mode === 'user') {
       if (doc.adminRows && doc.adminRows[r]) return true;            // ล็อก = ซ่อนจากผู้ใช้
       if (doc.uHideRows && doc.uHideRows[r]) return true;            // ซ่อนเฉพาะโหมดผู้ใช้
+      if (window.PermEnforce && PermEnforce.active()) {             // ซ่อนตามสิทธิ์ตำแหน่ง (กลุ่ม/หมวด/ยี่ห้อ/รหัส)
+        var pcode = rowCode(r);
+        if (pcode) { var pp = dbCache[pcode]; if (pp && PermEnforce.rowHiddenProduct(pp)) return true; }
+      }
     }
     return false;
   }
@@ -378,6 +420,10 @@
     if (view.mode === 'user') {
       if (doc.adminCols && doc.adminCols[c]) return true;
       if (doc.uHideCols && doc.uHideCols[c]) return true;
+      if (window.PermEnforce && PermEnforce.active()) {             // ซ่อนคอลัมน์ตามสิทธิ์ตำแหน่ง
+        var cm = doc.columnMap && doc.columnMap[c];
+        if (cm && cm.field && PermEnforce.colHiddenField(cm.field)) return true;
+      }
     }
     return false;
   }
@@ -611,6 +657,20 @@
   // ตัวเลขแบบปลอดภัย (ค่าเก่าอาจเป็นข้อความ — ไม่ให้ throw จนหน้าพัง)
   function nOr(v, fb) { return XL2.isNumeric(v) ? XL2.toN(v) : fb; }
 
+  // เนื้อหาในช่อง: ถ้าคอลัมน์/ช่องผูกฟิลด์ 'dotRange' และแถวลิงก์ DB → แสดงช่วงปี DOT ลงสีตามอายุ · มิฉะนั้นข้อความปกติ
+  function dotCellBody(r, c, disp, cl3c) {
+    if (window.DOT) {
+      var cmF = doc.columnMap && doc.columnMap[c] && doc.columnMap[c].field;
+      var clF = cl3c && cl3c.field;
+      if (cmF === 'dotRange' || clF === 'dotRange') {
+        var code = (clF === 'dotRange' && cl3c) ? cl3c.code : rowCode(r);
+        var p = (code && isCode13(code)) ? dbCache[code] : null;
+        if (p) return window.DOT.cellHTML(p, uiDark ? darkContrast : null, view.zoom) || '';
+      }
+    }
+    return esc(disp).replace(/\n/g, '<br>');
+  }
+
   function tdHTML(r, c, isAdmin, effRs, effCs) {
     var cell = cellAt(r, c), s = (cell && cell.s) || {};
     var mg = doc.merges[key(r, c)];
@@ -691,12 +751,21 @@
     }
     return '<td class="' + cls + '" data-r="' + r + '" data-c="' + c + '"' + span + (st ? ' style="' + st + '"' : '') +
       (cl3c ? ' title="🗄️ ลิงก์เฉพาะช่อง: ' + esc(cl3c.code) + ' · ' + esc(window.DBX ? window.DBX.fieldLabel(cl3c.field) : cl3c.field) + '"' : (linked ? ' title="🔗 ' + esc(rowLinkLabel(r)) + '"' : (chg && isAdmin && cls.indexOf(' chg') >= 0 ? ' title="✏️ ปรับรอบนี้ · เดิม: ' + esc(XL2.fmtNum(nOr(chg.old, 0))) + (cls.indexOf('chg-up') >= 0 ? ' (ขึ้น)' : ' (ลง)') + '"' : ''))) +
-      '>' + cellMark + esc(disp).replace(/\n/g, '<br>') + suffix + '</td>';
+      '>' + cellMark + dotCellBody(r, c, disp, cl3c) + suffix + '</td>';
   }
 
   // ---------- selection ----------
   function cellEl(r, c) { var a = anchorOf(r, c); return rootEl.querySelector('td[data-r="' + a.r + '"][data-c="' + a.c + '"]'); }
   function range() { return { r1: Math.min(sel.r, sel.ar), r2: Math.max(sel.r, sel.ar), c1: Math.min(sel.c, sel.ac), c2: Math.max(sel.c, sel.ac) }; }
+
+  // Ctrl+คลิกหัวคอลัมน์/แถว → เลือกหลายอันแบบไม่ต่อเนื่อง (คอลัมน์กับแถวแยกชุดกัน) — สำหรับลากปรับขนาดพร้อมกัน
+  var multiCols = [], multiRows = [];
+  function clearMulti() { if (multiCols.length || multiRows.length) { multiCols = []; multiRows = []; paintMulti(); } }
+  function paintMulti() {
+    rootEl.querySelectorAll('.sg-h.multi,.sg-g.multi').forEach(function (e) { e.classList.remove('multi'); });
+    multiCols.forEach(function (c) { var h = rootEl.querySelector('.sg-h[data-hc="' + c + '"]'); if (h) h.classList.add('multi'); });
+    multiRows.forEach(function (r) { var g = rootEl.querySelector('.sg-g[data-gr="' + r + '"]'); if (g) g.classList.add('multi'); });
+  }
 
   function paintSel() {
     rootEl.querySelectorAll('.sg-c.sel,.sg-c.act').forEach(function (e) { e.classList.remove('sel', 'act'); });
@@ -712,6 +781,7 @@
     var act = cellEl(sel.r, sel.c); if (act) act.classList.add('act');
     for (var c2 = R.c1; c2 <= R.c2; c2++) { var h = rootEl.querySelector('.sg-h[data-hc="' + c2 + '"]'); if (h) h.classList.add('on'); }
     for (var r2 = R.r1; r2 <= R.r2; r2++) { var g = rootEl.querySelector('.sg-g[data-gr="' + r2 + '"]'); if (g) g.classList.add('on'); }
+    paintMulti();
     drawSelRect();
     updateBars();
   }
@@ -1817,13 +1887,17 @@
   var rz = null;
   function startRzCol(ci, x) {
     var R = range();
-    var cols = (ci >= R.c1 && ci <= R.c2 && R.c1 !== R.c2) ? rangeArr(R.c1, R.c2) : [ci];
+    var cols;
+    if (multiCols.length > 1 && multiCols.indexOf(ci) >= 0) cols = multiCols.slice();   // ลากขยายหลายคอลัมน์ที่ Ctrl+เลือกไว้ (ไม่ต่อเนื่อง) พร้อมกัน
+    else cols = (ci >= R.c1 && ci <= R.c2 && R.c1 !== R.c2) ? rangeArr(R.c1, R.c2) : [ci];
     rz = { kind: 'col', idx: ci, cols: cols, startX: x, w0: doc.colW[ci] || 64 };
     pushUndo();
   }
   function startRzRow(ri, y) {
     var R = range();
-    var rows = (ri >= R.r1 && ri <= R.r2 && R.r1 !== R.r2) ? rangeArr(R.r1, R.r2) : [ri];
+    var rows;
+    if (multiRows.length > 1 && multiRows.indexOf(ri) >= 0) rows = multiRows.slice();   // ลากขยายหลายแถวที่ Ctrl+เลือกไว้ พร้อมกัน
+    else rows = (ri >= R.r1 && ri <= R.r2 && R.r1 !== R.r2) ? rangeArr(R.r1, R.r2) : [ri];
     rz = { kind: 'row', idx: ri, rows: rows, startY: y, h0: doc.rowH[ri] || 19 };
     pushUndo();
   }
@@ -1999,7 +2073,8 @@
         it('🔄', 'แสดงที่ซ่อนทั้งหมด', showAllHidden) +
         sep() +
         it(rLocked ? '🔓' : '🔒', rLocked ? 'ปลดล็อกการมองเห็นแถว (ให้ผู้ใช้เห็น)' : 'ล็อกแถว (ซ่อนจากผู้ใช้)', toggleLockRows) +
-        it(cLocked ? '🔓' : '🔒', cLocked ? 'ปลดล็อกการมองเห็นคอลัมน์ (ให้ผู้ใช้เห็น)' : 'ล็อกคอลัมน์ (ซ่อนจากผู้ใช้)', toggleLockCols));
+        it(cLocked ? '🔓' : '🔒', cLocked ? 'ปลดล็อกการมองเห็นคอลัมน์ (ให้ผู้ใช้เห็น)' : 'ล็อกคอลัมน์ (ซ่อนจากผู้ใช้)', toggleLockCols) +
+        (rowCode(sel.r) ? (sep() + it('🏷️', 'ซ่อนแถวนี้สำหรับตำแหน่ง…', function () { if (window.AdminCentral && AdminCentral.quickHideRow) AdminCentral.quickHideRow(rowCode(sel.r), rowLinkLabel(sel.r)); else toast('ยังไม่มีโมดูลระบบกลาง'); })) : ''));
     })();
     html += sep();
     html += it('⊞', 'ผสาน/ยกเลิกผสานเซลล์', toggleMerge);
@@ -2267,6 +2342,7 @@
         e.preventDefault(); startEdit(' '); break;
       case 'Escape':
         if (clip) { clearClip(); break; }
+        if (multiCols.length || multiRows.length) { clearMulti(); break; }   // ยกเลิกการเลือกหลายคอลัมน์/แถวแบบ Ctrl ก่อน
         if (sel.r !== sel.ar || sel.c !== sel.ac) { sel.ar = sel.r; sel.ac = sel.c; paintSel(); break; }   // ยกเลิกการลากเลือกหลายช่อง → เหลือช่องเดียว
         closeCtx(); break;
       default:
@@ -2312,6 +2388,15 @@
         if (!(hc >= Rh.c1 && hc <= Rh.c2)) { sel.ac = hc; sel.c = hc; sel.ar = 0; sel.r = doc.nRows - 1; }
         paintSel(); rootEl.focus(); return;
       }
+      if (e.ctrlKey || e.metaKey) {   // Ctrl+คลิก = สลับเลือก/เอาออกคอลัมน์นี้ เข้าชุดเลือกหลายคอลัมน์
+        var ic = multiCols.indexOf(hc);
+        if (ic >= 0) multiCols.splice(ic, 1); else multiCols.push(hc);
+        sel.ac = hc; sel.c = hc; sel.ar = 0; sel.r = doc.nRows - 1;
+        paintSel(); rootEl.focus(); e.preventDefault();
+        toast(multiCols.length > 1 ? 'เลือก ' + multiCols.length + ' คอลัมน์ — ลากเส้นขอบหัวคอลัมน์เพื่อปรับความกว้างพร้อมกัน' : (multiCols.length === 1 ? 'Ctrl+คลิกหัวคอลัมน์อื่นเพื่อเลือกหลายคอลัมน์' : ''));
+        return;
+      }
+      clearMulti();
       if (e.shiftKey) sel.c = hc; else { sel.ac = hc; sel.c = hc; }
       sel.ar = 0; sel.r = doc.nRows - 1;
       drag = 'head'; paintSel(); rootEl.focus(); e.preventDefault(); return;
@@ -2326,6 +2411,15 @@
         if (!(gr >= Rg.r1 && gr <= Rg.r2)) { sel.ar = gr; sel.r = gr; sel.ac = 0; sel.c = doc.nCols - 1; }
         paintSel(); rootEl.focus(); return;
       }
+      if (e.ctrlKey || e.metaKey) {   // Ctrl+คลิก = สลับเลือก/เอาออกแถวนี้ เข้าชุดเลือกหลายแถว
+        var ig = multiRows.indexOf(gr);
+        if (ig >= 0) multiRows.splice(ig, 1); else multiRows.push(gr);
+        sel.ar = gr; sel.r = gr; sel.ac = 0; sel.c = doc.nCols - 1;
+        paintSel(); rootEl.focus(); e.preventDefault();
+        toast(multiRows.length > 1 ? 'เลือก ' + multiRows.length + ' แถว — ลากเส้นขอบหัวแถวเพื่อปรับความสูงพร้อมกัน' : (multiRows.length === 1 ? 'Ctrl+คลิกหัวแถวอื่นเพื่อเลือกหลายแถว' : ''));
+        return;
+      }
+      clearMulti();
       if (e.shiftKey) sel.r = gr; else { sel.ar = gr; sel.r = gr; }
       sel.ac = 0; sel.c = doc.nCols - 1;
       drag = 'gut'; paintSel(); rootEl.focus(); e.preventDefault(); return;
@@ -2336,6 +2430,13 @@
     var td = e.target.closest('td.sg-c');
     if (!td) return;
     if (editing) commitEdit();
+    // คลิกช่อง DOT (คอลัมน์ผูก dotRange) ที่มี > 1 ชุด → popup ราคาแยกราย DOT
+    if (e.button === 0 && window.DOT && doc.columnMap && doc.columnMap[+td.dataset.c] && doc.columnMap[+td.dataset.c].field === 'dotRange') {
+      var _dr = +td.dataset.r, _dcode = rowCode(_dr), _dp = _dcode ? dbCache[_dcode] : null;
+      if (_dp && DOT.shouldPopup(_dp)) {
+        if (DOT.openPricePopup(_dp, td, view.mode, { retail: valueOf(_dr, 7), b: valueOf(_dr, 13), a: valueOf(_dr, 16), s: valueOf(_dr, 19) })) { rootEl.focus(); return; }
+      }
+    }
     if ((view.mode === 'user' && td.classList.contains('pclick')) || (PRICE_NAME[+td.dataset.c] && rowCode(+td.dataset.r))) {
       showPricePop(+td.dataset.r, +td.dataset.c, td);
     } else hidePricePop();
@@ -2344,6 +2445,7 @@
       if (r < R.r1 || r > R.r2 || c < R.c1 || c > R.c2) setActive(r, c, false, true);
       return;
     }
+    clearMulti();
     setActive(+td.dataset.r, +td.dataset.c, e.shiftKey, true);
     drag = 'cell';
     rootEl.focus();

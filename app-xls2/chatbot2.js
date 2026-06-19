@@ -146,24 +146,27 @@
     return 'ผมตอบเรื่องราคาในชีตนี้ได้ครับ ลองถาม:<br>· “ราคา 195R14C”<br>· “MK1000 ราคาเท่าไหร่”<br>· “ยางถูกสุดขอบ 14”<br>· “มีปรับราคาอะไรบ้าง”' + (isAdmin() ? '<br>· “margin สูงสุด” · “ถอดรหัส TNLX”' : '');
   }
 
-  // ---------- ไอคอนหมาหุ่นยนต์ชิบะอินุ 🐕🤖 ----------
-  var SHIBA = '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="ชิบะหุ่นยนต์">' +
-    '<line x1="32" y1="7" x2="32" y2="15" stroke="#777" stroke-width="3"/>' +
-    '<circle cx="32" cy="6" r="3.4" fill="#d62828"/>' +
-    '<polygon points="11,28 19,9 28,21" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
-    '<polygon points="53,28 45,9 36,21" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
-    '<polygon points="15.5,24 19.5,14.5 24,20.5" fill="#7a5220"/>' +
-    '<polygon points="48.5,24 44.5,14.5 40,20.5" fill="#7a5220"/>' +
-    '<rect x="10" y="17" width="44" height="38" rx="13" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
-    '<ellipse cx="32" cy="45" rx="16.5" ry="11.5" fill="#FFF6E8"/>' +
-    '<rect x="15.5" y="28" width="13" height="9" rx="3.5" fill="#2b2b2b"/>' +
-    '<rect x="35.5" y="28" width="13" height="9" rx="3.5" fill="#2b2b2b"/>' +
-    '<circle cx="22" cy="32.5" r="2.2" fill="#7CFFB2"/>' +
-    '<circle cx="42" cy="32.5" r="2.2" fill="#7CFFB2"/>' +
-    '<rect x="28.5" y="40" width="7" height="5.5" rx="2.5" fill="#333"/>' +
-    '<path d="M32 45.5 V49 M26.5 50 Q32 54 37.5 50" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>' +
-    '<circle cx="14" cy="42" r="1.8" fill="#9c6b1e"/>' +
-    '<circle cx="50" cy="42" r="1.8" fill="#9c6b1e"/>' +
+  // ---------- ไอคอนหมาชิบะอินุ + หูฟัง call center 🐕🎧 ----------
+  var SHIBA = '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="ชิบะ call center">' +
+    '<polygon points="12,26 18,8 29,20" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
+    '<polygon points="52,26 46,8 35,20" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
+    '<polygon points="16,23 19,12 24,19" fill="#7a5220"/>' +
+    '<polygon points="48,23 45,12 40,19" fill="#7a5220"/>' +
+    '<rect x="11" y="18" width="42" height="36" rx="14" fill="#E8A33D" stroke="#9c6b1e" stroke-width="1.5"/>' +
+    '<ellipse cx="32" cy="45" rx="16" ry="12" fill="#FFF6E8"/>' +
+    '<ellipse cx="32" cy="31" rx="6.5" ry="8" fill="#FFF6E8"/>' +
+    '<rect x="18" y="30.5" width="28" height="3" rx="1.5" fill="#1a1a1a"/>' +
+    '<rect x="17.5" y="31" width="11.5" height="8" rx="3.2" fill="#1a1a1a"/>' +
+    '<rect x="35" y="31" width="11.5" height="8" rx="3.2" fill="#1a1a1a"/>' +
+    '<rect x="19.5" y="33" width="6.5" height="2.4" rx="1.2" fill="#5b8fd6"/>' +
+    '<rect x="37" y="33" width="6.5" height="2.4" rx="1.2" fill="#5b8fd6"/>' +
+    '<ellipse cx="32" cy="43" rx="3" ry="2.2" fill="#333"/>' +
+    '<path d="M32 45 V48 M27 49 Q32 53 37 49" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>' +
+    '<path d="M9 33 Q32 8 55 33" fill="none" stroke="#2A6FDB" stroke-width="4" stroke-linecap="round"/>' +
+    '<rect x="5" y="29" width="9.5" height="16" rx="4.7" fill="#2A6FDB" stroke="#1b4f9e" stroke-width="1"/>' +
+    '<rect x="49.5" y="29" width="9.5" height="16" rx="4.7" fill="#2A6FDB" stroke="#1b4f9e" stroke-width="1"/>' +
+    '<path d="M54 38 Q58 50 40 51" fill="none" stroke="#2A6FDB" stroke-width="2.5" stroke-linecap="round"/>' +
+    '<circle cx="39" cy="51" r="2.8" fill="#d62828"/>' +
     '</svg>';
 
   // ---------- UI ----------

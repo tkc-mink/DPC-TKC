@@ -49,6 +49,11 @@
   function buildStatIconList() {
     var host = $('statIconList'); if (!host || !window.DBX) return;
     var defs = ((statWork && statWork.length) ? statWork : window.DBX.statusDefs()).slice().sort(function (a, b) { return (a.priority || 99) - (b.priority || 99); });
+    var condLabel = function (c) {
+      if (!c) return '';
+      if (c.indexOf('flag:') === 0) return 'ธงสินค้า: ' + c.slice(5) + ' (flags)';
+      return ({ out: 'คงเหลือ = 0 (qtyOnHand)', avail0: 'สุทธิ = 0 (qtyAvailable)', full: 'ครบชุด (qtyAvailable)', reservedPartial: 'ติดจองไม่ครบชุด (qtyReserved)', shortStock: 'ของไม่ถึงชุด (qtyOnHand)', incoming: 'ของกำลังเข้า (incoming/incomingInfo)' }[c]) || c;
+    };
     host.innerHTML = defs.map(function (d, i) {
       return '<div class="stdef" draggable="true" data-key="' + d.key + '" data-i="' + i + '">' +
         '<span class="stdef-num">' + (i + 1) + '</span>' +
@@ -57,6 +62,7 @@
         '<input type="color" class="stdef-color" value="#' + (d.color || '888888') + '" title="สีไอคอน (เติมข้างใน · ขอบดำ)">' +
         '<input class="stdef-label" value="' + (d.label || '').replace(/"/g, '&quot;') + '" placeholder="ชื่อสถานะ">' +
         '<input class="stdef-popup" value="' + (d.popup || '').replace(/"/g, '&quot;') + '" placeholder="คำอธิบาย (popup)">' +
+        '<span class="stdef-link' + (d.cond ? '' : ' nolink') + '" title="' + (d.cond ? ('🔗 ผูกกับข้อมูลสินค้า: ' + condLabel(d.cond) + ' · อ้างอิงจากรหัสสินค้า (code13) ที่ผูกในแถวนั้น · เปลี่ยนชื่อ/ไอคอน/สีได้ ลิงก์ไม่เปลี่ยน') : 'ไม่ผูกเงื่อนไข (สถานะกำหนดเอง)') + '">' + (d.cond ? '🔗' : '✎') + '</span>' +
         '<label class="stdef-en" title="เปิด/ปิด"><input type="checkbox"' + (d.enabled !== false ? ' checked' : '') + '></label>' +
         '<span class="stdef-del" title="ลบ">✕</span>' +
         '</div>';
@@ -376,12 +382,23 @@
     var cfg = DBX.config();
     $('connUrl').value = cfg.baseUrl || '';
     $('connToken').value = cfg.token || '';
+    if ($('connUser')) $('connUser').value = cfg.username || '';
+    if ($('connPass')) $('connPass').value = cfg.password || '';
+    if ($('connFlag')) $('connFlag').value = cfg.flag || 'PRICE';
     $('connUseAuth').checked = !!cfg.useAuth;
     $('connTimeout').value = cfg.timeoutMs ? Math.round(cfg.timeoutMs / 1000) : 12;
     setConnMode(cfg.adapter === 'http' ? 'http' : 'mock');
     $('connStatus').textContent = ''; $('connStatus').className = 'conn-status';
     document.querySelectorAll('#connMode button').forEach(function (b) {
-      b.onclick = function () { setConnMode(b.dataset.mode); };
+      b.onclick = function () {
+        setConnMode(b.dataset.mode);
+        if (b.dataset.mode === 'mock') {   // กดจำลอง → ใช้ข้อมูลจำลองชุดใหม่ทันที (อัพเดท)
+          DBX.setConfig({ adapter: 'mock' }); DBX.applyAdapter();
+          if (window.SG) { if (SG.clearDbCache) SG.clearDbCache(); SG.render(); }
+          updDbSrcBadge();
+          var st = $('connStatus'); st.className = 'conn-status ok'; st.textContent = '🔄 จำลองชุดใหม่ #' + (DBX.mockSeed ? DBX.mockSeed() : '') + ' — สุ่มสต็อก/ปี DOT/ของเข้าใหม่ (ราคาคงที่ตามชุดข้อมูลจริง)';
+        }
+      };
     });
     $('connTest').onclick = function () {
       var st = $('connStatus'); st.className = 'conn-status busy'; st.textContent = '⏳ กำลังทดสอบ…';
@@ -403,10 +420,39 @@
   function updDbSrcBadge() {
     var b = $('dbSrcBadge'); if (!b || !window.DBX) return;
     var live = DBX.adapter().kind === 'http';
-    b.classList.toggle('dbsrc-live', live);
     b.classList.toggle('dbsrc-mock', !live);
-    b.querySelector('.dbsrc-txt').textContent = live ? 'จริง (Live)' : 'จำลอง';
-    b.title = (live ? 'กำลังใช้เซิร์ฟเวอร์จริง' : 'กำลังใช้ข้อมูลจำลอง (Mock)') + ' — คลิกเพื่อตั้งค่าการเชื่อมต่อ';
+    if (!live) {
+      b.classList.remove('dbsrc-live', 'dbsrc-bad');
+      b.querySelector('.dbsrc-txt').textContent = 'จำลอง';
+      b.title = 'กำลังใช้ข้อมูลจำลอง (Mock) — คลิกเพื่อตั้งค่าการเชื่อมต่อ';
+      return;
+    }
+    // http: ตรวจสุขภาพการเชื่อมต่อจริง → เขียว=ต่อได้ · แดง=ต่อไม่ได้
+    b.classList.add('dbsrc-live'); b.classList.remove('dbsrc-bad');
+    b.querySelector('.dbsrc-txt').textContent = 'เช็ค…';
+    b.title = 'กำลังตรวจการเชื่อมต่อ…';
+    function snapAge() {
+      try {
+        var inf = DBX.snapshotInfo && DBX.snapshotInfo();
+        if (!inf || !inf.ts) return '';
+        var mins = Math.floor((Date.now() - inf.ts) / 60000);
+        var t = mins < 60 ? (mins + ' นาที') : (Math.floor(mins / 60) + ' ชม.' + (mins % 60 ? ' ' + (mins % 60) + ' น.' : ''));
+        return ' · ราคาเก่า ' + t + (inf.enc ? ' 🔒' : '');
+      } catch (e) { return ''; }
+    }
+    DBX.testConnection().then(function (r) {
+      var ok = !!(r && r.ok);
+      b.classList.toggle('dbsrc-live', ok);
+      b.classList.toggle('dbsrc-bad', !ok);
+      var age = ok ? '' : snapAge();
+      b.querySelector('.dbsrc-txt').textContent = ok ? 'จริง (Live)' : ('ออฟไลน์' + age);
+      b.title = ok ? ('✅ เชื่อมเซิร์ฟเวอร์จริงได้' + (r.count != null ? ' · ' + r.count + ' รายการ' : '')) : ('❌ ต่อเซิร์ฟเวอร์ไม่ได้: ' + ((r && r.error) || '') + (age ? ' — กำลังใช้' + age : '') + ' — คลิกเพื่อตั้งค่า');
+    }).catch(function () {
+      b.classList.remove('dbsrc-live'); b.classList.add('dbsrc-bad');
+      var age = snapAge();
+      b.querySelector('.dbsrc-txt').textContent = 'ออฟไลน์' + age;
+      b.title = '❌ ต่อเซิร์ฟเวอร์ไม่ได้' + (age ? ' — กำลังใช้' + age : '') + ' — คลิกเพื่อตั้งค่า';
+    });
   }
   function setConnMode(mode) {
     document.querySelectorAll('#connMode button').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === mode); });
@@ -418,6 +464,9 @@
       adapter: mode ? mode.dataset.mode : 'mock',
       baseUrl: ($('connUrl').value || '').trim(),
       token: ($('connToken').value || '').trim(),
+      username: ($('connUser') ? $('connUser').value : '').trim(),
+      password: ($('connPass') ? $('connPass').value : '').trim(),
+      flag: (($('connFlag') ? $('connFlag').value : '') || 'PRICE').trim(),
       useAuth: $('connUseAuth').checked,
       timeoutMs: (parseInt($('connTimeout').value, 10) || 12) * 1000
     };

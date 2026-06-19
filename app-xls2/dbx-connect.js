@@ -46,9 +46,21 @@
 
   // ---------- HttpAdapter (โครงพร้อมต่อ API จริง) [#7] ----------
   // สัญญา adapter เดียวกับ MockAdapter: search(opt)→[], get(code)→raw, batch(codes)→[raw], pushPrices(code,prices)→{ok,updated}
+  // + เก็บ snapshot ลง IndexedDB ทุกครั้งที่ดึงสำเร็จ · ต่อไม่ติด→ fallback ราคาล่าสุด (ทำงานต่อได้)
   function HttpAdapter(cfg) {
     cfg = cfg || {};
     var base = (cfg.baseUrl || '').replace(/\/+$/, '');
+    var snapMap = {}, snapLoaded = false;
+    function ensureSnap() {
+      if (snapLoaded) return Promise.resolve();
+      return (DBX._loadSnap ? DBX._loadSnap() : Promise.resolve(null)).then(function (s) { if (s && s.map) snapMap = s.map; snapLoaded = true; });
+    }
+    function persist(arr) {   // เติมผลที่ดึงได้ลง snapshot สะสม → เก็บลงเครื่อง (เฉพาะราคา ไม่มีทุน)
+      var got = false;
+      (Array.isArray(arr) ? arr : [arr]).forEach(function (p) { if (p && p.code13) { snapMap[p.code13] = p; got = true; } });
+      snapLoaded = true;
+      if (got && DBX._saveSnap) DBX._saveSnap({ ts: Date.now(), map: snapMap });
+    }
     function headers() {
       var h = { 'Content-Type': 'application/json' };
       if (cfg.useAuth && cfg.token) h['Authorization'] = 'Bearer ' + cfg.token;
@@ -68,10 +80,22 @@
       search: function (opt) {
         var q = [];
         if (opt) { if (opt.q) q.push('q=' + encodeURIComponent(opt.q)); if (opt.group) q.push('group=' + encodeURIComponent(opt.group)); if (opt.brand) q.push('brand=' + encodeURIComponent(opt.brand)); }
-        return req('/products' + (q.length ? '?' + q.join('&') : ''), { method: 'GET' });
+        return req('/products' + (q.length ? '?' + q.join('&') : ''), { method: 'GET' })
+          .catch(function (e) {   // ต่อไม่ได้ → ค้นจากดัชนีในเครื่อง (ถ้ามี)
+            if (DBX.searchLocal) return DBX.searchLocal((opt && opt.q) || '', 50).then(function (r) { if (r && r.length) return r; throw e; });
+            throw e;
+          });
       },
-      get: function (code) { return req('/products/' + encodeURIComponent(code), { method: 'GET' }); },
-      batch: function (codes) { return req('/products/batch', { method: 'POST', body: JSON.stringify({ codes: codes }) }); },
+      get: function (code) {
+        return req('/products/' + encodeURIComponent(code), { method: 'GET' })
+          .then(function (p) { persist(p); return p; })
+          .catch(function (e) { return ensureSnap().then(function () { var p = snapMap[String(code).trim()]; if (p) return p; throw e; }); });
+      },
+      batch: function (codes) {
+        return req('/products/batch', { method: 'POST', body: JSON.stringify({ codes: codes }) })
+          .then(function (arr) { persist(arr); return arr; })
+          .catch(function (e) { return ensureSnap().then(function () { var out = (codes || []).map(function (c) { return snapMap[String(c).trim()] || null; }).filter(Boolean); if (out.length) return out; throw e; }); });
+      },
       pushPrices: function (code, prices) { return req('/products/' + encodeURIComponent(code) + '/prices', { method: 'PUT', body: JSON.stringify(prices) }); }
     };
   }
@@ -80,7 +104,7 @@
   function applyAdapter() {
     var cfg = DBX.config();
     if (cfg.adapter === 'http' && cfg.baseUrl) DBX.setAdapter(HttpAdapter(cfg));
-    // mock เป็นค่าเริ่มต้นอยู่แล้ว (db-staging ตั้งให้)
+    else if (DBX.remakeMock) DBX.remakeMock();   // mock: สร้างชุดข้อมูลจำลองใหม่ (seed ใหม่) — กดจำลอง = ตัวเลขเปลี่ยนจริง
     return DBX.adapter().kind;
   }
 
